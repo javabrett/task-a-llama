@@ -35,12 +35,12 @@ typically does not need to type `/tal` literally.
 
 ### Working-directory to project mapping
 
-The skill maps `$PWD` to a Vikunja project. Override the default
-auto-create behaviour by writing a numeric project id (or exact
-project title) into `$PWD/.task-a-llama/project`. The convention
-is single-user gitignored; `.task-a-llama/` is in
-`~/.gitignore_global`. Users who want team-shared mappings can opt
-in by committing the file.
+The skill maps `$PWD` to a Vikunja project via a `tal-meta` block
+embedded in the Vikunja project's description (server-side, no
+per-repo files). Override the auto-discovery behaviour - or alias
+several directories to one project - via
+`~/.config/task-a-llama/overlay.yml` under `projects.aliases`. User
+repos do not need a `.task-a-llama/` directory.
 
 ### API and ad-hoc debugging
 
@@ -65,16 +65,11 @@ expect the global file to know about it).
 
 ## Suggested companion change to `~/.gitignore_global`
 
-If you don't already have a global gitignore configured, see
-`git config --global core.excludesfile`. Add the line:
-
-```
-.task-a-llama/
-```
-
-This keeps the per-directory project pointer file out of any repo
-by default. Opt in to committing it on a per-repo basis with
-`git add -f .task-a-llama/project`.
+No longer needed. The framework no longer writes any per-repo
+state - project bindings live inside Vikunja project descriptions.
+If you previously added `.task-a-llama/` to `~/.gitignore_global`,
+you can leave it there harmlessly or remove it; the framework will
+not create the directory.
 
 ## Why no automated install
 

@@ -101,7 +101,21 @@ symlink. Production is untouched.
   and the data repo are shared -- skills are global to the Claude Code
   installation.
 - **Mode file**: `~/.config/task-a-llama/active-mode` is global; both
-  stacks share the single switch state.
+  stacks share the single switch state. It is the mode selector, so
+  it has to be unscoped.
+
+## Environment-scoped state (forward-looking rule)
+
+Any client-side file that holds stack-specific values (numeric IDs,
+tokens, base URLs) must be either inside a mode-scoped directory
+(`~/vikunja/.env`, `~/vikunja-test/.env`) or namespaced by mode in
+its filename (e.g. a future cache as `foo.json` for production with a
+sibling `foo.test.json` for test). User repos must remain tal-unaware
+- project bindings live in Vikunja project descriptions (see
+`docs/task-model.md` and the skill's `tal-meta` convention), which
+are environment-scoped by virtue of the per-stack database. The full
+rule lives in this repo's `CLAUDE.md` under "Environment-bound state
+convention".
 
 ## Checking what's where
 

@@ -55,6 +55,40 @@ Subtasks exist via `RelatedTasks` with kind `subtask`/`parenttask` but
 are managed through `/api/v1/tasks/{id}/relations`, not on the task
 object itself.
 
+## Task identifiers - stability warning
+
+Vikunja exposes two identifiers per task:
+
+- **Global `id`** (`task.id`) - the database primary key. Stable, unique
+  across all projects, used in all API calls and URLs (e.g. `/tasks/17`).
+  This is the only identifier the skill uses or that callers should rely on.
+
+- **Project index** (`task.index`) - a per-project sequential counter
+  displayed in the UI as `#10`, or as `TAL-10` when the project has an
+  `identifier` prefix set. **This is NOT a stable reference.**
+
+The index is assigned as `MAX(current task indices in project) + 1`
+(source: `calculateNextTaskIndex` in
+`repos/vikunja/pkg/models/tasks.go:860`). Consequences:
+
+- When a task moves to a different project it gets a new `MAX + 1` index
+  in the destination. Its old index slot in the source is now free.
+- When all tasks leave a project, `MAX = 0`, so the next task created
+  in that project gets `index = 1` -- reusing an index previously held
+  by a completely different task.
+- `TAL-1` today and `TAL-1` tomorrow can refer to entirely different
+  tasks if the project was emptied and repopulated in between.
+
+This was confirmed by live observation: moving "test task" out of TAL
+emptied the project; the next task created ("test2") received `index 1`,
+becoming `TAL-1` -- the same identifier previously held by "test task".
+
+A `GET /tasks/by-ref/TAL-1` endpoint has been proposed in
+go-vikunja/vikunja#2694. Without a solution to index reuse (e.g.
+an ever-increasing monotonic counter rather than MAX + 1), that endpoint
+would be unsafe for use as a durable reference. Until then, always use
+the global `id`.
+
 ## Mapping principles
 
 1. **Default conservatively.** Unspecified fields stay null. Priority,
@@ -73,54 +107,67 @@ object itself.
 
 ## Working-directory to project mapping
 
-Proposal: **auto-create with manual override via a pointer file**.
+The `cwd -> project` binding is recorded **inside the Vikunja project
+itself**, in a delimited `tal-meta` block in the project's
+`description` field. There is no per-repo state - user repos stay
+tal-unaware, no `.task-a-llama/` directory, no pointer file.
 
-### Default: auto-create
+### Why server-side
 
-When the skill needs a project and no pointer file exists, it:
+Two stacks (production, test) run with independent databases, so
+numeric Vikunja IDs cannot be carried between them. Storing the
+binding inside the Vikunja project entity makes it naturally
+environment-scoped (each stack has its own copy of the binding) and
+removes the duplicate-state problem that a local pointer file would
+introduce. It also keeps the framework aligned with the API-only
+access rule (see CLAUDE.md): no host-disk dependencies, portable to
+managed/remote Vikunja in the future.
 
-1. Takes `basename "$PWD"` as the project title candidate.
-2. Searches existing Vikunja projects by exact title match
-   (`GET /api/v1/projects?s=<title>`).
-3. If a match exists, uses it. If not, creates a new project with that
-   title (`PUT /api/v1/projects`).
-4. On first-use for a directory, writes a pointer file so subsequent
-   captures skip the lookup.
+### The tal-meta block
 
-Why this default: zero friction for one-off repos, deterministic per-
-directory.
-
-### Override: pointer file
-
-Users can override by creating `.task-a-llama/project` in the repo root:
+Auto-create writes a description like this:
 
 ```
-# Either a numeric id:
-42
-
-# or an exact project title:
-MoneyLion - Ingestion
+<pre># --- tal-meta (task-a-llama internal - do not edit) ---
+path: /Users/brettrandall/src/some-repo
+created-by: claude-sonnet-4-6
+captured-at: 2026-04-26
+# --- end tal-meta ---</pre>
 ```
 
-The skill reads the first non-comment line. Pointer files can be
-committed to the repo (public intent) or gitignored (private intent) -
-the skill doesn't care.
+The block sits inside `<pre>` so it survives Vikunja's TipTap editor
+round-trip (HTML comments may be stripped; plain text inside `<pre>`
+is durable). The block header provides the namespace, so keys
+(`path:`, `created-by:`, `captured-at:`) are plain. Only `path:` is
+consulted by resolution; other fields are informational.
 
-The pointer file is how you:
+If the user adds prose to the description in the Vikunja UI, the
+block stays intact - the skill grep-finds it by its delimiters.
 
-- Point multiple repos at a single Vikunja project (e.g. one "Personal"
-  project used across several scratch repos)
-- Use a project with a title that doesn't match `basename "$PWD"`
-- Guard against accidental project creation in throwaway directories
+### Resolution algorithm
 
-### Open question
+First match wins:
 
-Should `.task-a-llama/` be a committed convention (documented in
-project CLAUDE.md files) or a gitignored personal thing (added to
-`~/.gitignore_global`)? The former makes the mapping shareable across
-a team; the latter keeps Vikunja metadata out of the repo entirely.
-Recommendation: **gitignored by default**, since `task-a-llama` is
-single-user. Users who want team-shared mappings opt in.
+1. **Overlay alias** (`~/.config/task-a-llama/overlay.yml` under
+   `projects.aliases."<basename(PWD)>"`). Titles only.
+2. **Description scan**: `GET /api/v1/projects` and find the project
+   whose `tal-meta` block has `path: $PWD`.
+3. **Title fallback / repair**: search by `basename "$PWD"`; if a
+   same-named project exists without the binding, offer to add a
+   `tal-meta` block to it (one-prompt repair).
+4. **Auto-create**: confirm with the user, then `PUT /projects` with
+   a fresh `tal-meta` block in the description.
+
+Damage to the block is recoverable via the title fallback - removal
+of the binding doesn't lose the project, just causes the next
+resolution to re-bind via prompt.
+
+### Multi-repo to single-project mappings
+
+Use the overlay's `projects.aliases` to point several directory
+basenames at the same project title (e.g. several scratch
+directories all mapped to `Personal`). The `tal-meta` block holds at
+most one `path:`; one binding per project entity.
 
 ## Labels: three axes
 
@@ -227,19 +274,23 @@ These parts of Vikunja's model are real but off the v1 capture path:
 
 ## Resolved policy (Phase 2)
 
-The four design questions originally flagged here (pointer file scope,
+The four design questions originally flagged here (binding storage,
 label auto-create, project auto-create UX, batch cap) were resolved
 during Phase 2 implementation. Decisions:
 
-1. **Pointer file**: gitignored personal convention by default
-   (`.task-a-llama/` belongs in `~/.gitignore_global`). Users opt in
-   to committing it for team-shared mappings.
+1. **Binding storage**: server-side, in a `tal-meta` block embedded
+   in the Vikunja project's description. No per-repo files; user
+   repos remain tal-unaware. Naturally environment-scoped (each
+   stack has its own database) and aligned with the API-only access
+   rule. Earlier proposal of a local `.task-a-llama/project` pointer
+   file was discarded because numeric IDs leak across the
+   production / test stack split.
 2. **Label auto-create**: yes for `src:*` and `state:*` (small known
    vocabularies); refuse for `context:*` (typo guard - customer
    labels are pre-seeded via the overlay's `customers:` list).
 3. **Project auto-create**: paraphrase + confirm on the first
    capture in a directory; silently resolve on subsequent captures
-   once the pointer file exists.
+   via the description scan.
 4. **Batch cap**: warn at > 20 tasks per batch; refuse at > 50
    unless the user explicitly types `force`.
 
