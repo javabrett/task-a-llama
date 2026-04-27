@@ -76,6 +76,7 @@ tal_log "Verifying the token against the API..."
 if ! curl -sf -H "Authorization: Bearer $token" "${api_base}/projects" >/dev/null 2>&1; then
   tal_die "Token did not authenticate. Re-mint and try again."
 fi
+tal_log "Token verified OK."
 
 TAL_TOKEN="$token" python3 - "$env_file" <<'PY'
 import os, re, sys, pathlib
