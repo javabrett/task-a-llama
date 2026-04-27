@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # restart.sh - restart the Vikunja stack.
-# Use after editing .env (e.g. flipping ENABLEREGISTRATION off).
+# Use after editing .env (e.g. updating TZ or VIKUNJA_API_TOKEN).
 
 set -euo pipefail
 

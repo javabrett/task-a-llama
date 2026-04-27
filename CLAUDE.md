@@ -20,7 +20,7 @@ Read `README.md` first for project overview, structure, and design decisions.
 
 ## Conventions
 
-- Docker images pinned to minor version (e.g. `v2.1`), not `latest`
+- Docker images pinned to minor version (e.g. `2.3`), not `latest`; Vikunja tags have no `v` prefix
 - Bind mounts, not named volumes, for all persistent data
 - Secrets in `.env` (gitignored); shape documented in `.env.example` (committed)
 - Cross-repo paths configured in `config.yml` (gitignored); shape in `config.example.yml`

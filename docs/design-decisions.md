@@ -131,11 +131,14 @@ Only `adapters/claude-code/` exists today; others get added if/when needed.
 
 ## Why Pin Docker Images to Minor Version
 
-Compose file uses `vikunja/vikunja:v2.1` rather than `:latest` or `:v2.1.0`.
+Compose file uses `vikunja/vikunja:2.3` rather than `:latest` or `:2.3.0`.
 
 - `:latest` risks surprise major-version upgrades with schema migrations
-- `:v2.1.0` is fully pinned — never gets patch updates, including security fixes
-- `:v2.1` gets patch updates (v2.1.0 → v2.1.1 → …) but never jumps to v2.2
+- `:2.3.0` is fully pinned -- never gets patch updates, including security fixes
+- `:2.3` gets patch updates (2.3.0 -> 2.3.1 -> ...) but never jumps to 2.4
+
+Vikunja's Docker Hub tags use no `v` prefix (e.g. `2.3`, `2.3.0`), unlike
+some other projects. Watchtower uses the same un-prefixed convention.
 
 Watchtower runs in monitor-only mode — it notifies of available updates
 without applying them, letting us read release notes before upgrading minors

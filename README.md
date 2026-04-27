@@ -127,10 +127,10 @@ $EDITOR config.yml
 ./bin/bootstrap.sh
 # (bootstrap warns if companion repos are absent — that's fine for Phase 1)
 
-# 4. First login
+# 4. First login - bootstrap prints credentials when the stack comes up
 open http://localhost:3456
-# Register an account (becomes admin), then flip VIKUNJA_SERVICE_ENABLEREGISTRATION
-# to false in ~/vikunja/.env and run: ./bin/restart.sh
+# Log in with the username/password printed by bootstrap.
+# Save them in your password manager.
 
 # 5. Create a Vikunja API token for Claude Code (Phase 2 onward)
 # In Vikunja: Settings -> API Tokens -> Create. Add to ~/vikunja/.env as VIKUNJA_API_TOKEN.
@@ -160,7 +160,7 @@ The public skills repo keeps Vikunja knowledge in plain markdown (`knowledge/api
 Only the framework repo knows about the other three. The skills repo doesn't know where data lives; the data repo doesn't know about skills. Cross-repo paths flow through the framework's `config.yml`. This keeps each repo focused and makes renames / relocations cheap.
 
 ### Pin Docker images to minor versions
-`vikunja/vikunja:v2.1` rather than `latest` or `v2.1.0`. Gets patch updates through Watchtower without being surprised by major version changes that might include schema migrations.
+`vikunja/vikunja:2.3` rather than `latest` or `2.3.0`. Gets patch updates through Watchtower without being surprised by major version changes that might include schema migrations. Note: Vikunja's Docker Hub tags have no `v` prefix.
 
 ---
 

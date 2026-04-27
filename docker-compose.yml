@@ -15,7 +15,7 @@
 
 services:
   vikunja:
-    image: vikunja/vikunja:v2.1
+    image: vikunja/vikunja:2.3
     container_name: vikunja
     restart: unless-stopped
     ports:
@@ -23,7 +23,7 @@ services:
     environment:
       # Service configuration (values come from .env in runtime_dir)
       VIKUNJA_SERVICE_PUBLICURL: "${VIKUNJA_SERVICE_PUBLICURL}"
-      VIKUNJA_SERVICE_JWTSECRET: "${VIKUNJA_JWT_SECRET}"
+      VIKUNJA_SERVICE_SECRET: "${VIKUNJA_JWT_SECRET}"
       VIKUNJA_SERVICE_ENABLEREGISTRATION: "${VIKUNJA_SERVICE_ENABLEREGISTRATION}"
 
       # SQLite backend - the single-file store
@@ -47,7 +47,7 @@ services:
   # Monitor-only: notifies about new images, never applies them.
   # Per docs/design-decisions.md, we pin to v2.1 minor and upgrade deliberately.
   watchtower:
-    image: containrrr/watchtower:1.7
+    image: containrrr/watchtower:1.7.1
     container_name: task-a-llama-watchtower
     restart: unless-stopped
     command:

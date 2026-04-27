@@ -4,14 +4,13 @@
 # Idempotent. Safe to re-run; each step is a no-op when already complete.
 #
 # What this does:
-#   1. Validates required commands are installed (docker, yq, sqlite3, git, openssl)
+#   1. Validates required commands are installed (docker, yq, sqlite3, openssl)
 #   2. Seeds config.yml from config.example.yml if missing (then asks the user to edit and re-run)
 #   3. Creates runtime_dir/{db,files}
 #   4. Symlinks docker-compose.yml into runtime_dir
 #   5. Seeds runtime_dir/.env from .env.example if missing (and generates a JWT secret)
-#   6. Clones the public skills repo if not already present (warns instead of failing)
-#   7. Verifies private-skills and data repo paths exist (warns, does not clone)
-#   8. Optionally brings the stack up (use --up to skip the interactive prompt)
+#   6. Reports status of companion repo paths (informational only - bootstrap never clones)
+#   7. Optionally brings the stack up (use --up to skip the interactive prompt)
 
 set -euo pipefail
 
@@ -34,7 +33,6 @@ tal_log "Validating prerequisites..."
 require_cmd docker "install Docker Desktop, OrbStack, or Colima"
 require_cmd yq "brew install yq"
 require_cmd sqlite3 "ships with macOS; or brew install sqlite"
-require_cmd git "xcode-select --install or brew install git"
 require_cmd openssl "ships with macOS"
 docker compose version >/dev/null 2>&1 || tal_die "'docker compose' subcommand not available. Install Docker Desktop v2+ or the compose plugin."
 
@@ -63,7 +61,9 @@ tal_log "Symlinked docker-compose.yml into runtime_dir"
 
 # Seed .env if missing.
 env_file="${runtime_dir}/.env"
+fresh_env=0
 if [[ ! -f "$env_file" ]]; then
+  fresh_env=1
   tal_log "Creating ${env_file} from .env.example"
   cp "$TAL_ENV_EXAMPLE" "$env_file"
   # Generate a JWT secret and replace the placeholder in-place.
@@ -82,41 +82,30 @@ PY
   tal_log ""
   tal_log "Review ${env_file} and confirm:"
   tal_log "  - TZ is correct (currently: $(grep '^TZ=' "$env_file" | cut -d= -f2-))"
-  tal_log "  - VIKUNJA_SERVICE_ENABLEREGISTRATION=true for first-run, then flip to false"
   tal_log "  - VIKUNJA_API_TOKEN left as placeholder for now (Phase 2)"
 else
   tal_log ".env already exists at ${env_file}, leaving as-is"
 fi
 
-# Clone public skills repo if configured and not yet present.
-skills_repo="$(config_public_skills_repo)"
-skills_local="$(config_public_skills_local)"
-if [[ -n "$skills_repo" && -n "$skills_local" ]]; then
-  if [[ -d "${skills_local}/.git" ]]; then
-    tal_log "Public skills repo already present at ${skills_local}"
+# Report companion repo paths. Bootstrap never clones or creates these --
+# how they got there (git clone, stow, manual) is not our concern.
+# backup.sh checks git capability at backup time when it actually matters.
+tal_log ""
+tal_log "Companion repos:"
+for label_path in \
+  "public skills:$(config_public_skills_local)" \
+  "private skills:$(config_private_skills_path)" \
+  "data repo:$(config_data_repo_local)"; do
+  label="${label_path%%:*}"
+  path="${label_path#*:}"
+  if [[ -z "$path" ]]; then
+    tal_log "  ${label}: not configured"
+  elif [[ -d "$path" ]]; then
+    tal_log "  ${label}: present (${path})"
   else
-    tal_log "Cloning public skills repo: ${skills_repo}"
-    mkdir -p "$(dirname "$skills_local")"
-    if ! git clone "$skills_repo" "$skills_local" 2>/dev/null; then
-      tal_warn "could not clone ${skills_repo} (does it exist yet?) -- skipping"
-      tal_warn "  Phase 2 authors the skill; this is non-blocking for Phase 1 infrastructure"
-    fi
+    tal_warn "${label}: not found at ${path}"
   fi
-fi
-
-# Verify private skills path (managed externally by mac-setup dotfiles).
-private_path="$(config_private_skills_path)"
-if [[ -n "$private_path" && ! -d "$private_path" ]]; then
-  tal_warn "private skills path not found: ${private_path}"
-  tal_warn "  managed_by mac-setup -- bootstrap will not create it"
-fi
-
-# Verify data repo local path (user-managed; do not clone).
-data_local="$(config_data_repo_local)"
-if [[ -n "$data_local" && ! -d "${data_local}/.git" ]]; then
-  tal_warn "data repo not found at ${data_local}"
-  tal_warn "  backup.sh --commit will fail until you clone it there manually"
-fi
+done
 
 tal_log ""
 tal_log "Bootstrap complete."
@@ -139,5 +128,49 @@ else
 fi
 
 if [[ "$do_up" == "1" ]]; then
-  exec "$(dirname "${BASH_SOURCE[0]}")/up.sh"
+  bin_dir="$(dirname "${BASH_SOURCE[0]}")"
+
+  if [[ "$fresh_env" == "1" ]]; then
+    # First-run: create the initial account via the Vikunja CLI running inside
+    # the container. This bypasses VIKUNJA_SERVICE_ENABLEREGISTRATION entirely --
+    # registration stays disabled throughout; no toggle required.
+    "$bin_dir/up.sh"
+
+    tal_log ""
+    tal_log "Waiting for Vikunja to be ready..."
+    ready=0
+    for i in $(seq 1 30); do
+      if curl -sf http://localhost:3456/api/v1/info >/dev/null 2>&1; then
+        ready=1
+        break
+      fi
+      sleep 1
+    done
+    if [[ "$ready" == "0" ]]; then
+      tal_die "Vikunja did not become ready within 30 seconds. Check: docker logs vikunja"
+    fi
+
+    init_user="admin"
+    init_email="admin@example.com"
+    init_pass="$(openssl rand -base64 18)"
+
+    tal_log "Creating initial account..."
+    if docker exec vikunja /app/vikunja/vikunja user create \
+        --username "$init_user" \
+        --email    "$init_email" \
+        --password "$init_pass" 2>&1; then
+      tal_log ""
+      tal_log "================================================================"
+      tal_log "  Initial account created - save these in your password manager"
+      tal_log "  URL:      http://localhost:3456"
+      tal_log "  Username: ${init_user}"
+      tal_log "  Password: ${init_pass}"
+      tal_log "================================================================"
+    else
+      tal_warn "User creation via CLI failed - an account may already exist."
+      tal_warn "Log in at http://localhost:3456 with your existing credentials."
+    fi
+  else
+    exec "$bin_dir/up.sh"
+  fi
 fi

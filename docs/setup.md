@@ -93,17 +93,32 @@ actual timezone.
 
 ## 4. First login
 
-```bash
-open http://localhost:3456
+When bootstrap brings the stack up for the first time, it creates your initial
+account automatically via the Vikunja CLI running inside the container. No
+browser registration step is needed; `VIKUNJA_SERVICE_ENABLEREGISTRATION` stays
+`false` throughout.
+
+Bootstrap prints the credentials when it's done:
+
+```
+================================================================
+  Initial account created - save these in your password manager
+  URL:      http://localhost:3456
+  Username: admin
+  Password: <generated>
+================================================================
 ```
 
-Register an account. The first user registered becomes the admin.
+Save the password in your password manager, then open the URL and log in.
 
-Once registered, close the registration loophole:
+If you brought the stack up separately (e.g. `./bin/up.sh`), create the account
+manually the same way bootstrap does:
 
 ```bash
-$EDITOR ~/vikunja/.env        # set VIKUNJA_SERVICE_ENABLEREGISTRATION=false
-./bin/restart.sh
+docker exec vikunja /app/vikunja/vikunja user create \
+  --username admin \
+  --email    admin@localhost \
+  --password "$(openssl rand -base64 18)"
 ```
 
 ## 5. Create an API token (for Phase 2)
@@ -151,9 +166,9 @@ once you're happy with the config.
 **Port 3456 already in use** - change the host-side port in
 `docker-compose.yml` (the `"127.0.0.1:3456:3456"` line) and re-run bootstrap.
 
-**`VIKUNJA_SERVICE_ENABLEREGISTRATION` not taking effect** - docker compose
-re-reads `.env` only on `up` / `restart`. Use `./bin/restart.sh` after
-editing `.env`.
+**Can't log in after a fresh install** - check that bootstrap completed
+successfully. If you brought the stack up manually, create the initial account
+via `docker exec` (see step 4 above).
 
 See [docs/backup-restore.md](backup-restore.md) for backup / restore workflows
 and [docs/design-decisions.md](design-decisions.md) for the rationale behind
