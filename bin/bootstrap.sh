@@ -3,26 +3,32 @@
 #
 # Idempotent. Safe to re-run; each step is a no-op when already complete.
 #
+# Usage:
+#   bootstrap.sh [production|test] [flags]    # default: production
+#
 # What this does:
 #   1. Validates required commands are installed (docker, yq, sqlite3, openssl)
 #   2. Seeds config.yml from config.example.yml if missing (then asks the user to edit and re-run)
-#   3. Creates runtime_dir/{db,files}
+#   3. Creates runtime_dir/{db,files} for the given instance
 #   4. Symlinks docker-compose.yml into runtime_dir
 #   5. Seeds runtime_dir/.env from .env.example if missing (and generates a JWT secret)
-#   6. Reports status of companion repo paths (informational only - bootstrap never clones)
-#   7. Optionally brings the stack up (use --up to skip the interactive prompt)
+#   6. For test instance: rewrites port/container-name overrides to localhost:4567
+#   7. Reports status of companion repo paths (informational only - bootstrap never clones)
+#   8. Optionally brings the stack up (use --up to skip the interactive prompt)
 
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
+instance="production"
 auto_up=0
 for arg in "$@"; do
   case "$arg" in
+    production|test) instance="$arg" ;;
     --up) auto_up=1 ;;
     --no-up) auto_up=-1 ;;
     -h|--help)
-      sed -n '2,14p' "${BASH_SOURCE[0]}"
+      sed -n '2,18p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) tal_die "unknown argument: $arg" ;;
@@ -45,8 +51,8 @@ if [[ ! -f "$TAL_CONFIG" ]]; then
   exit 0
 fi
 
-runtime_dir="$(config_runtime_dir)"
-tal_log "runtime_dir resolved to ${runtime_dir}"
+runtime_dir="$(config_runtime_dir "$instance")"
+tal_log "runtime_dir resolved to ${runtime_dir} (instance: ${instance})"
 mkdir -p "${runtime_dir}/db" "${runtime_dir}/files"
 
 # Symlink docker-compose.yml into runtime_dir.
@@ -79,10 +85,32 @@ if placeholder in text:
     path.write_text(text)
 PY
   tal_log "Generated VIKUNJA_JWT_SECRET in ${env_file}"
+
+  # For the test instance, rewrite production defaults to test-specific values.
+  if [[ "$instance" == "test" ]]; then
+    TAL_INSTANCE="test" python3 - "$env_file" <<'PY'
+import re, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+
+replacements = {
+    r'^VIKUNJA_SERVICE_PUBLICURL=.*$': 'VIKUNJA_SERVICE_PUBLICURL=http://localhost:4567/',
+    r'^VIKUNJA_PORT=.*$':              'VIKUNJA_PORT=4567',
+    r'^VIKUNJA_CONTAINER_NAME=.*$':    'VIKUNJA_CONTAINER_NAME=vikunja-test',
+    r'^VIKUNJA_WATCHTOWER_NAME=.*$':   'VIKUNJA_WATCHTOWER_NAME=task-a-llama-watchtower-test',
+    r'^VIKUNJA_BASE_URL=.*$':          'VIKUNJA_BASE_URL=http://localhost:4567/api/v1',
+}
+for pattern, replacement in replacements.items():
+    text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
+path.write_text(text)
+PY
+    tal_log "Rewrote test-instance overrides in ${env_file} (port 4567, container vikunja-test)"
+  fi
+
   tal_log ""
   tal_log "Review ${env_file} and confirm:"
   tal_log "  - TZ is correct (currently: $(grep '^TZ=' "$env_file" | cut -d= -f2-))"
-  tal_log "  - VIKUNJA_API_TOKEN left as placeholder for now (Phase 2)"
+  tal_log "  - VIKUNJA_API_TOKEN left as placeholder; run ./bin/first-run.sh ${instance} to capture it"
 else
   tal_log ".env already exists at ${env_file}, leaving as-is"
 fi
@@ -130,24 +158,32 @@ fi
 if [[ "$do_up" == "1" ]]; then
   bin_dir="$(dirname "${BASH_SOURCE[0]}")"
 
+  # Resolve instance-specific URL/container values for the up + ready check.
+  port="$(grep '^VIKUNJA_PORT=' "$env_file" | cut -d= -f2-)"
+  port="${port:-3456}"
+  web_base="http://localhost:${port}"
+  api_base="${web_base}/api/v1"
+  container_name="$(grep '^VIKUNJA_CONTAINER_NAME=' "$env_file" | cut -d= -f2-)"
+  container_name="${container_name:-vikunja}"
+
   if [[ "$fresh_env" == "1" ]]; then
     # First-run: create the initial account via the Vikunja CLI running inside
     # the container. This bypasses VIKUNJA_SERVICE_ENABLEREGISTRATION entirely --
     # registration stays disabled throughout; no toggle required.
-    "$bin_dir/up.sh"
+    "$bin_dir/up.sh" "$instance"
 
     tal_log ""
-    tal_log "Waiting for Vikunja to be ready..."
+    tal_log "Waiting for Vikunja (${instance}) to be ready..."
     ready=0
     for i in $(seq 1 30); do
-      if curl -sf http://localhost:3456/api/v1/info >/dev/null 2>&1; then
+      if curl -sf "${api_base}/info" >/dev/null 2>&1; then
         ready=1
         break
       fi
       sleep 1
     done
     if [[ "$ready" == "0" ]]; then
-      tal_die "Vikunja did not become ready within 30 seconds. Check: docker logs vikunja"
+      tal_die "Vikunja did not become ready within 30 seconds. Check: docker logs ${container_name}"
     fi
 
     init_user="admin"
@@ -155,22 +191,22 @@ if [[ "$do_up" == "1" ]]; then
     init_pass="$(openssl rand -base64 18)"
 
     tal_log "Creating initial account..."
-    if docker exec vikunja /app/vikunja/vikunja user create \
+    if docker exec "$container_name" /app/vikunja/vikunja user create \
         --username "$init_user" \
         --email    "$init_email" \
         --password "$init_pass" 2>&1; then
       tal_log ""
       tal_log "================================================================"
       tal_log "  Initial account created - save these in your password manager"
-      tal_log "  URL:      http://localhost:3456"
+      tal_log "  URL:      ${web_base}"
       tal_log "  Username: ${init_user}"
       tal_log "  Password: ${init_pass}"
       tal_log "================================================================"
     else
       tal_warn "User creation via CLI failed - an account may already exist."
-      tal_warn "Log in at http://localhost:3456 with your existing credentials."
+      tal_warn "Log in at ${web_base} with your existing credentials."
     fi
   else
-    exec "$bin_dir/up.sh"
+    exec "$bin_dir/up.sh" "$instance"
   fi
 fi

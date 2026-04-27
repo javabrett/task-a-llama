@@ -4,6 +4,9 @@
 # This is destructive and irreversible. Binary/SQL backups OUTSIDE runtime_dir
 # are never touched by this script.
 #
+# Usage:
+#   nuke.sh [production|test] [flags]
+#
 # Flags:
 #   --keep-env       Leave runtime_dir/.env alone (default: removed)
 #   --keep-compose   Leave runtime_dir/docker-compose.yml symlink alone (default: removed)
@@ -15,23 +18,25 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 require_config
 require_cmd docker
 
+instance="production"
 keep_env=0
 keep_compose=0
 skip_prompt=0
 for arg in "$@"; do
   case "$arg" in
+    production|test) instance="$arg" ;;
     --keep-env) keep_env=1 ;;
     --keep-compose) keep_compose=1 ;;
     --yes) skip_prompt=1 ;;
     -h|--help)
-      sed -n '2,12p' "${BASH_SOURCE[0]}"
+      sed -n '2,14p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) tal_die "unknown argument: $arg" ;;
   esac
 done
 
-runtime_dir="$(config_runtime_dir)"
+runtime_dir="$(config_runtime_dir "$instance")"
 [[ -d "$runtime_dir" ]] || tal_die "runtime_dir does not exist: ${runtime_dir}"
 
 tal_log ""

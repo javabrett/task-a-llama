@@ -89,11 +89,25 @@ path_expand() {
 }
 
 # Convenience accessors with ~ expansion and required-field checks.
+#
+# config_runtime_dir [instance]
+# Returns the runtime directory for the given instance.
+# - "production" (or no arg): the value from config.yml as-is.
+# - "test": appends "-test" to the production runtime_dir.
+# Test instances live alongside production by convention; no separate
+# config.yml entry is needed.
 config_runtime_dir() {
+  local instance="${1:-production}"
   local v
   v="$(config_get '.runtime_dir')"
   [[ -n "$v" ]] || tal_die "config.yml: runtime_dir is required"
-  path_expand "$v"
+  local base
+  base="$(path_expand "$v")"
+  case "$instance" in
+    production) echo "$base" ;;
+    test)       echo "${base}-test" ;;
+    *)          tal_die "config_runtime_dir: unknown instance '$instance' (valid: production, test)" ;;
+  esac
 }
 
 config_backup_binary_dir() {

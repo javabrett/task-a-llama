@@ -8,12 +8,17 @@
 #   2. SQL dump: <backup.sql_dump_target>
 #      Plain SQL for diffable Git history; overwrites each run.
 #
+# Usage:
+#   backup.sh [production|test] [flags]    # default: production
+#
 # Flags:
 #   --commit   After the dump, git-commit the data repo (no push).
 #   --push     Imply --commit and also push to origin.
 #   --no-prune Skip retention pruning (debugging / catastrophic-avoidance).
 #
 # The stack does NOT need to be stopped - .backup is online-safe.
+# Test-instance backups are unusual (test data is disposable); supported for
+# occasional save-points during destructive testing.
 
 set -euo pipefail
 
@@ -22,23 +27,25 @@ require_config
 require_cmd sqlite3
 require_cmd tar
 
+instance="production"
 do_commit=0
 do_push=0
 do_prune=1
 for arg in "$@"; do
   case "$arg" in
+    production|test) instance="$arg" ;;
     --commit) do_commit=1 ;;
     --push) do_commit=1; do_push=1 ;;
     --no-prune) do_prune=0 ;;
     -h|--help)
-      sed -n '2,17p' "${BASH_SOURCE[0]}"
+      sed -n '2,21p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) tal_die "unknown argument: $arg" ;;
   esac
 done
 
-runtime_dir="$(config_runtime_dir)"
+runtime_dir="$(config_runtime_dir "$instance")"
 db_file="${runtime_dir}/db/vikunja.db"
 files_dir="${runtime_dir}/files"
 binary_dir="$(config_backup_binary_dir)"

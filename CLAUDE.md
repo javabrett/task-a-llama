@@ -46,12 +46,29 @@ Read `README.md` first for project overview, structure, and design decisions.
 When making Vikunja API calls (via curl or skill operations), always return
 a direct URL to the affected resource after any successful mutation:
 
-- Project: `http://localhost:3456/projects/{id}`
-- Task: `http://localhost:3456/tasks/{id}`
-- Comment: `http://localhost:3456/tasks/{task_id}#comment-{comment_id}`
+- Project: `<WEB_BASE>/projects/{id}`
+- Task: `<WEB_BASE>/tasks/{id}`
+- Comment: `<WEB_BASE>/tasks/{task_id}#comment-{comment_id}`
+
+`WEB_BASE` is `http://localhost:3456` in production and `http://localhost:4567`
+in test mode (see `docs/test-stack.md`). The `/tal` skill resolves it from
+the active mode's `.env` file.
 
 This applies whether the call is a one-off debug curl or part of a skill
 operation. Don't make the user hunt in the UI.
+
+## Production / test stack split
+
+Two isolated Vikunja stacks can run side-by-side:
+
+- Production: `~/vikunja/` (port 3456, container `vikunja`) - the gold copy
+- Test: `~/vikunja-test/` (port 4567, container `vikunja-test`) - disposable
+
+All lifecycle scripts (`bin/up.sh`, `down.sh`, `nuke.sh`, `backup.sh`,
+`first-run.sh`, `bootstrap.sh`) accept an `[production|test]` argument,
+defaulting to `production`. The `/tal` skill switches between them via
+`~/.config/task-a-llama/active-mode` (file-based mode signal). See
+`docs/test-stack.md` for setup and usage.
 
 ## Task ID system
 

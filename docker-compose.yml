@@ -16,10 +16,10 @@
 services:
   vikunja:
     image: vikunja/vikunja:2.3
-    container_name: vikunja
+    container_name: "${VIKUNJA_CONTAINER_NAME:-vikunja}"
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3456:3456"
+      - "127.0.0.1:${VIKUNJA_PORT:-3456}:3456"
     environment:
       # Service configuration (values come from .env in runtime_dir)
       VIKUNJA_SERVICE_PUBLICURL: "${VIKUNJA_SERVICE_PUBLICURL}"
@@ -48,7 +48,7 @@ services:
   # Per docs/design-decisions.md, we pin to v2.1 minor and upgrade deliberately.
   watchtower:
     image: containrrr/watchtower:1.7.1
-    container_name: task-a-llama-watchtower
+    container_name: "${VIKUNJA_WATCHTOWER_NAME:-task-a-llama-watchtower}"
     restart: unless-stopped
     command:
       - --monitor-only

@@ -233,3 +233,10 @@ via `docker exec` (see step 4 above).
 See [docs/backup-restore.md](backup-restore.md) for backup / restore workflows
 and [docs/design-decisions.md](design-decisions.md) for the rationale behind
 these choices.
+
+## Optional: isolated test stack
+
+Once you're using `/tal` for real task management, you'll want to keep test
+data and exploratory work out of your production Vikunja. The framework
+supports a fully isolated second stack on port 4567. See
+[docs/test-stack.md](test-stack.md) for setup and switching.

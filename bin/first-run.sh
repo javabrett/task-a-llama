@@ -14,6 +14,9 @@
 # Run after ./bin/bootstrap.sh and after creating an API token in the
 # Vikunja UI: Settings -> API Tokens -> Create. Scope to the routes the
 # /tal skill needs (projects, tasks, labels - read+write).
+#
+# Usage:
+#   first-run.sh [production|test]    # default: production
 
 set -euo pipefail
 
@@ -21,9 +24,16 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
 require_config
 
-runtime_dir="$(config_runtime_dir)"
+instance="${1:-production}"
+runtime_dir="$(config_runtime_dir "$instance")"
 env_file="${runtime_dir}/.env"
-[[ -f "$env_file" ]] || tal_die ".env not found at ${env_file}. Run ./bin/bootstrap.sh first."
+[[ -f "$env_file" ]] || tal_die ".env not found at ${env_file}. Run ./bin/bootstrap.sh ${instance} first."
+
+# Resolve port from the env file so we open the right UI.
+port="$(grep '^VIKUNJA_PORT=' "$env_file" | cut -d= -f2- || true)"
+port="${port:-3456}"
+web_base="http://localhost:${port}"
+api_base="${web_base}/api/v1"
 
 placeholder="create_in_vikunja_ui_after_first_login"
 token_re='^tk_[0-9a-f]{40,}$'
@@ -34,19 +44,19 @@ if [[ -n "$current" && "$current" != "$placeholder" && "$current" =~ $token_re ]
   exit 0
 fi
 
-tal_log "Confirming Vikunja is reachable on http://localhost:3456..."
-if ! curl -sf http://localhost:3456/api/v1/info >/dev/null 2>&1; then
-  tal_die "Vikunja is not responding. Run ./bin/up.sh first."
+tal_log "Confirming Vikunja (${instance}) is reachable on ${web_base}..."
+if ! curl -sf "${api_base}/info" >/dev/null 2>&1; then
+  tal_die "Vikunja is not responding. Run ./bin/up.sh ${instance} first."
 fi
 
 tal_log ""
 tal_log "Opening the Vikunja API Tokens UI in your browser..."
 tal_log "  Steps to follow there:"
 tal_log "    1. Click 'Create token'."
-tal_log "    2. Name it: claude-code"
+tal_log "    2. Name it: claude-code (or claude-code-test for the test instance)"
 tal_log "    3. Scope to the minimum: projects, tasks, labels (read + write)."
 tal_log "    4. Copy the tk_... value."
-open 'http://localhost:3456/api-tokens' 2>/dev/null || tal_warn "Could not auto-open browser; visit http://localhost:3456/api-tokens manually."
+open "${web_base}/api-tokens" 2>/dev/null || tal_warn "Could not auto-open browser; visit ${web_base}/api-tokens manually."
 tal_log ""
 
 token=""
@@ -62,7 +72,7 @@ while [[ -z "$token" ]]; do
 done
 
 tal_log "Verifying the token against the API..."
-if ! curl -sf -H "Authorization: Bearer $token" http://localhost:3456/api/v1/projects >/dev/null 2>&1; then
+if ! curl -sf -H "Authorization: Bearer $token" "${api_base}/projects" >/dev/null 2>&1; then
   tal_die "Token did not authenticate. Re-mint and try again."
 fi
 
