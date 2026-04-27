@@ -1,0 +1,61 @@
+# Vikunja - minimal single-user setup with SQLite backend
+#
+# Deployed into runtime_dir (default ~/vikunja/) by bin/bootstrap.sh.
+# Invoked from there so bind mounts and .env resolve relative to runtime_dir.
+#
+# Quick start:
+#   ./bin/bootstrap.sh    # validates prereqs, seeds .env, sets up runtime_dir
+#   ./bin/up.sh           # docker compose up -d (rooted at runtime_dir)
+#   open http://localhost:3456
+#
+# Data lives in:
+#   <runtime_dir>/db/vikunja.db    <- your SQLite task database
+#   <runtime_dir>/files/           <- task attachments & uploads
+#   <runtime_dir>/.env             <- secrets (gitignored; shape in .env.example)
+
+services:
+  vikunja:
+    image: vikunja/vikunja:v2.1
+    container_name: vikunja
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3456:3456"
+    environment:
+      # Service configuration (values come from .env in runtime_dir)
+      VIKUNJA_SERVICE_PUBLICURL: "${VIKUNJA_SERVICE_PUBLICURL}"
+      VIKUNJA_SERVICE_JWTSECRET: "${VIKUNJA_JWT_SECRET}"
+      VIKUNJA_SERVICE_ENABLEREGISTRATION: "${VIKUNJA_SERVICE_ENABLEREGISTRATION}"
+
+      # SQLite backend - the single-file store
+      VIKUNJA_DATABASE_TYPE: "sqlite"
+      VIKUNJA_DATABASE_PATH: "/db/vikunja.db"
+
+      # CORS disabled - frontend & API share the same origin on localhost
+      VIKUNJA_CORS_ENABLE: "false"
+
+      # Timezone - affects reminder delivery & timestamps
+      TZ: "${TZ}"
+
+    volumes:
+      - ./db:/db                      # SQLite file lives here - the only thing that matters for backup
+      - ./files:/app/vikunja/files    # Attachments & uploads
+
+    labels:
+      # Watchtower opt-in: only containers with this label are monitored.
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # Monitor-only: notifies about new images, never applies them.
+  # Per docs/design-decisions.md, we pin to v2.1 minor and upgrade deliberately.
+  watchtower:
+    image: containrrr/watchtower:1.7
+    container_name: task-a-llama-watchtower
+    restart: unless-stopped
+    command:
+      - --monitor-only
+      - --label-enable
+      - --interval
+      - "86400"         # once per day
+    environment:
+      TZ: "${TZ}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -1,0 +1,54 @@
+# task-a-llama — framework orchestration config
+#
+# Copy this file to config.yml and adjust values for your setup.
+# config.yml is gitignored; this example file documents the schema.
+
+# Where Vikunja's runtime directory lives on the host filesystem.
+# Bind mounts for db/ and files/ are created here.
+runtime_dir: ~/vikunja
+
+# Related repositories the framework orchestrates.
+# Each entry declares where the repo lives locally and (optionally) how
+# bootstrap should clone/manage it.
+sources:
+
+  # Public AI skills — Vikunja knowledge + AI-runtime adapters
+  public_skills:
+    repo: https://github.com/your-github-username/task-a-llama-skills.git
+    local: ~/code/task-a-llama-skills
+    stow_target: ~/.claude/skills
+    visibility: public
+
+  # Private skills overlay — personal conventions and customer context
+  private_skills:
+    # Managed externally (by mac-setup dotfiles); bootstrap only verifies presence.
+    path: ~/code/mac-setup/dotfiles/task-a-llama-overlay
+    stow_target: ~/.claude/skills
+    visibility: private
+    managed_by: mac-setup
+
+  # Data repo — SQL dumps of task database, committed on every backup cycle
+  data:
+    repo: git@github.com:your-github-username/task-a-llama-pasture.git
+    local: ~/code/task-a-llama-pasture
+    visibility: private
+    # If true, bootstrap imports the SQL dump on fresh setup
+    restore_on_bootstrap: true
+
+# AI runtimes this setup is configured for.
+# Currently only claude-code is supported; future adapters for cursor, aider,
+# codex etc. would be added here and stowed from the public_skills repo.
+ai_runtimes:
+  - name: claude-code
+    enabled: true
+
+# Backup configuration — referenced by bin/backup.sh and the LaunchAgent
+backup:
+  # Where point-in-time binary snapshots go (rolling retention)
+  binary_dir: ~/backups/task-a-llama
+  # Where the SQL dump is written (committed to data repo)
+  sql_dump_target: ~/code/task-a-llama-pasture/tasks.sql
+  # Days of binary snapshots to retain
+  retention_days: 7
+  # Cron-style schedule for the LaunchAgent (daily at 4am local time)
+  schedule: "0 4 * * *"

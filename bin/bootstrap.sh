@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# bootstrap.sh - first-run setup for task-a-llama.
+#
+# Idempotent. Safe to re-run; each step is a no-op when already complete.
+#
+# What this does:
+#   1. Validates required commands are installed (docker, yq, sqlite3, git, openssl)
+#   2. Seeds config.yml from config.example.yml if missing (then asks the user to edit and re-run)
+#   3. Creates runtime_dir/{db,files}
+#   4. Symlinks docker-compose.yml into runtime_dir
+#   5. Seeds runtime_dir/.env from .env.example if missing (and generates a JWT secret)
+#   6. Clones the public skills repo if not already present (warns instead of failing)
+#   7. Verifies private-skills and data repo paths exist (warns, does not clone)
+#   8. Optionally brings the stack up (use --up to skip the interactive prompt)
+
+set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
+
+auto_up=0
+for arg in "$@"; do
+  case "$arg" in
+    --up) auto_up=1 ;;
+    --no-up) auto_up=-1 ;;
+    -h|--help)
+      sed -n '2,14p' "${BASH_SOURCE[0]}"
+      exit 0
+      ;;
+    *) tal_die "unknown argument: $arg" ;;
+  esac
+done
+
+tal_log "Validating prerequisites..."
+require_cmd docker "install Docker Desktop, OrbStack, or Colima"
+require_cmd yq "brew install yq"
+require_cmd sqlite3 "ships with macOS; or brew install sqlite"
+require_cmd git "xcode-select --install or brew install git"
+require_cmd openssl "ships with macOS"
+docker compose version >/dev/null 2>&1 || tal_die "'docker compose' subcommand not available. Install Docker Desktop v2+ or the compose plugin."
+
+if [[ ! -f "$TAL_CONFIG" ]]; then
+  tal_log "config.yml not found - copying from config.example.yml"
+  cp "$TAL_CONFIG_EXAMPLE" "$TAL_CONFIG"
+  tal_log ""
+  tal_log "Edit $TAL_CONFIG to match your setup (runtime_dir, source paths, timezone),"
+  tal_log "then re-run ./bin/bootstrap.sh"
+  exit 0
+fi
+
+runtime_dir="$(config_runtime_dir)"
+tal_log "runtime_dir resolved to ${runtime_dir}"
+mkdir -p "${runtime_dir}/db" "${runtime_dir}/files"
+
+# Symlink docker-compose.yml into runtime_dir.
+# ln -sf is idempotent: it replaces any existing symlink at the target.
+if [[ -f "${runtime_dir}/docker-compose.yml" && ! -L "${runtime_dir}/docker-compose.yml" ]]; then
+  tal_err "${runtime_dir}/docker-compose.yml exists and is a regular file, not a symlink."
+  tal_err "If you have local edits, back them up; otherwise remove it and re-run bootstrap."
+  exit 1
+fi
+ln -sf "$TAL_COMPOSE" "${runtime_dir}/docker-compose.yml"
+tal_log "Symlinked docker-compose.yml into runtime_dir"
+
+# Seed .env if missing.
+env_file="${runtime_dir}/.env"
+if [[ ! -f "$env_file" ]]; then
+  tal_log "Creating ${env_file} from .env.example"
+  cp "$TAL_ENV_EXAMPLE" "$env_file"
+  # Generate a JWT secret and replace the placeholder in-place.
+  jwt_secret="$(openssl rand -base64 32)"
+  # Use a Python one-liner for safe in-place replacement without sed escaping pitfalls.
+  TAL_JWT="$jwt_secret" python3 - "$env_file" <<'PY'
+import os, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+placeholder = "generate_with_openssl_rand_base64_32"
+text = path.read_text()
+if placeholder in text:
+    text = text.replace(placeholder, os.environ["TAL_JWT"])
+    path.write_text(text)
+PY
+  tal_log "Generated VIKUNJA_JWT_SECRET in ${env_file}"
+  tal_log ""
+  tal_log "Review ${env_file} and confirm:"
+  tal_log "  - TZ is correct (currently: $(grep '^TZ=' "$env_file" | cut -d= -f2-))"
+  tal_log "  - VIKUNJA_SERVICE_ENABLEREGISTRATION=true for first-run, then flip to false"
+  tal_log "  - VIKUNJA_API_TOKEN left as placeholder for now (Phase 2)"
+else
+  tal_log ".env already exists at ${env_file}, leaving as-is"
+fi
+
+# Clone public skills repo if configured and not yet present.
+skills_repo="$(config_public_skills_repo)"
+skills_local="$(config_public_skills_local)"
+if [[ -n "$skills_repo" && -n "$skills_local" ]]; then
+  if [[ -d "${skills_local}/.git" ]]; then
+    tal_log "Public skills repo already present at ${skills_local}"
+  else
+    tal_log "Cloning public skills repo: ${skills_repo}"
+    mkdir -p "$(dirname "$skills_local")"
+    if ! git clone "$skills_repo" "$skills_local" 2>/dev/null; then
+      tal_warn "could not clone ${skills_repo} (does it exist yet?) -- skipping"
+      tal_warn "  Phase 2 authors the skill; this is non-blocking for Phase 1 infrastructure"
+    fi
+  fi
+fi
+
+# Verify private skills path (managed externally by mac-setup dotfiles).
+private_path="$(config_private_skills_path)"
+if [[ -n "$private_path" && ! -d "$private_path" ]]; then
+  tal_warn "private skills path not found: ${private_path}"
+  tal_warn "  managed_by mac-setup -- bootstrap will not create it"
+fi
+
+# Verify data repo local path (user-managed; do not clone).
+data_local="$(config_data_repo_local)"
+if [[ -n "$data_local" && ! -d "${data_local}/.git" ]]; then
+  tal_warn "data repo not found at ${data_local}"
+  tal_warn "  backup.sh --commit will fail until you clone it there manually"
+fi
+
+tal_log ""
+tal_log "Bootstrap complete."
+tal_log "Runtime: ${runtime_dir}"
+
+# Decide whether to bring the stack up.
+if [[ "$auto_up" == "1" ]]; then
+  do_up=1
+elif [[ "$auto_up" == "-1" ]]; then
+  do_up=0
+else
+  if [[ -t 0 ]]; then
+    read -r -p "Bring the Vikunja stack up now? [Y/n] " reply
+    reply="${reply:-Y}"
+    [[ "$reply" =~ ^[Yy] ]] && do_up=1 || do_up=0
+  else
+    tal_log "Non-interactive; skipping 'up'. Run ./bin/up.sh when ready."
+    do_up=0
+  fi
+fi
+
+if [[ "$do_up" == "1" ]]; then
+  exec "$(dirname "${BASH_SOURCE[0]}")/up.sh"
+fi

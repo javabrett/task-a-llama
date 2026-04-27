@@ -1,0 +1,194 @@
+# Backup & Restore
+
+Vikunja stores everything you care about in two places: the SQLite database
+file and the attachments directory. `task-a-llama` wraps them in a
+three-layer backup strategy.
+
+## What gets backed up
+
+| Layer | Format | Location | Purpose |
+| --- | --- | --- | --- |
+| Binary snapshot | `.tgz` (SQLite file + `files/`) | `backup.binary_dir` | Point-in-time, fast restore |
+| SQL dump | Plain SQL from `sqlite3 .dump` | `backup.sql_dump_target` (inside the data repo) | Diffable Git history, portable across SQLite versions |
+| Attachments | Included in the binary snapshot | n/a | Usually empty for TODO-style workflows |
+
+The binary snapshot is created via SQLite's online `.backup` API, which is
+transaction-safe while the database is being written. You do not need to
+stop Vikunja to take a backup.
+
+Rationale for the two-layer approach is in [design-decisions.md](design-decisions.md)
+(search for "SQL dumps in Git").
+
+## Running a backup
+
+Manual:
+
+```bash
+./bin/backup.sh
+```
+
+Produces:
+
+- `backup.binary_dir/task-a-llama-YYYY-MM-DD-HHMMSS.tgz` (new file per run)
+- `backup.sql_dump_target` (overwritten each run)
+
+Prunes any `task-a-llama-*.tgz` files older than `backup.retention_days`
+(default 7) from `backup.binary_dir`. Files not matching the naming pattern
+are never deleted.
+
+### Committing the SQL dump
+
+```bash
+./bin/backup.sh --commit
+```
+
+Git-adds and commits `backup.sql_dump_target` inside the data repo at
+`sources.data.local`. Does not push.
+
+```bash
+./bin/backup.sh --push
+```
+
+As `--commit`, then `git push`. Useful when you're running interactively
+and have SSH credentials loaded; not recommended for unattended LaunchAgent
+invocation (see below).
+
+## Scheduled backups (LaunchAgent)
+
+A LaunchAgent plist template lives at `bin/launchd/com.task-a-llama.backup.plist`.
+It runs `backup.sh --commit` daily at 04:00 local time.
+
+### Install
+
+```bash
+# 1. Set up the log directory
+mkdir -p ~/Library/Logs/task-a-llama
+
+# 2. Copy the template and substitute paths
+mkdir -p ~/Library/LaunchAgents
+sed \
+  -e "s#__BIN_DIR__#$HOME/code/task-a-llama/bin#g" \
+  -e "s#__LOG_DIR__#$HOME/Library/Logs/task-a-llama#g" \
+  bin/launchd/com.task-a-llama.backup.plist \
+  > ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+
+# 3. Load it
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+```
+
+### Check it
+
+```bash
+launchctl print gui/$(id -u)/com.task-a-llama.backup
+tail -f ~/Library/Logs/task-a-llama/backup.log
+```
+
+Run it manually once to confirm the path substitutions are correct:
+
+```bash
+launchctl kickstart gui/$(id -u)/com.task-a-llama.backup
+```
+
+### Uninstall
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+rm ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+```
+
+### Why no `--push` in the LaunchAgent
+
+Pushing to a private Git remote from `launchd` needs the SSH agent socket
+available in the `launchd` environment, which is fiddly on macOS. The
+template commits but doesn't push, and you run `git -C <data_repo> push`
+from a shell periodically (or not at all - commits accumulate locally and
+serve as offline history).
+
+If you really want automated push: load the SSH agent socket into `launchd`
+via a separate login plist and add `--push` to the `ProgramArguments`.
+
+## Restoring
+
+The stack is stopped automatically during restore; you don't need to stop
+it first.
+
+### From a binary snapshot (preferred)
+
+```bash
+./bin/restore.sh binary ~/backups/task-a-llama/task-a-llama-2026-04-24-040000.tgz
+```
+
+Restores both the database and the attachments. Prompts for confirmation
+before overwriting.
+
+### From a SQL dump
+
+```bash
+./bin/restore.sh sql ~/code/task-a-llama-pasture/tasks.sql
+```
+
+Restores the database only. Attachments in `runtime_dir/files/` are left
+alone. Use this when the binary snapshots are gone and you only have the
+Git-tracked SQL dump.
+
+## Full disaster recovery from scratch
+
+You lost everything on the local machine. You have:
+
+- A clone of the framework repo (or can re-clone it)
+- A clone of the data repo (`task-a-llama-pasture`) with the committed SQL dump
+
+Steps:
+
+```bash
+# 1. Clone the framework
+git clone <framework-url> ~/code/task-a-llama
+cd ~/code/task-a-llama
+
+# 2. Clone the data repo
+git clone <data-repo-url> ~/code/task-a-llama-pasture
+
+# 3. Configure
+cp config.example.yml config.yml
+$EDITOR config.yml       # confirm paths
+
+# 4. Bootstrap and bring up a clean instance
+./bin/bootstrap.sh --up
+
+# 5. Wait for Vikunja to initialize the empty DB, then down the stack
+./bin/down.sh
+
+# 6. Restore from the SQL dump
+./bin/restore.sh sql ~/code/task-a-llama-pasture/tasks.sql
+```
+
+At step 6 the restore script starts the stack back up for you. Log in with
+your original credentials; all tasks, projects, and labels come back.
+
+Attachments (if you had any) are not recoverable from the SQL dump alone -
+they live only in binary snapshots. For a TODO workflow this is usually
+fine; if you rely on attachments, keep a binary snapshot off-site
+(e.g. rsync the latest `.tgz` to a separate machine).
+
+## Troubleshooting
+
+**`database not found`** - the stack has never been bootstrapped, or
+`runtime_dir` in `config.yml` points somewhere unexpected. Confirm:
+
+```bash
+yq '.runtime_dir' config.yml
+ls "$(yq -r '.runtime_dir' config.yml | sed "s|^~|$HOME|")/db/"
+```
+
+**`--commit requires a git repo at ...`** - clone the data repo to the
+configured path, or run `git init` there if you're deferring the remote
+setup.
+
+**Pruned too aggressively** - increase `backup.retention_days` in
+`config.yml`. The prune only touches files matching `task-a-llama-*.tgz`;
+anything else parked in `binary_dir` is untouched.
+
+**LaunchAgent silently does nothing** - `launchctl print gui/$(id -u)/com.task-a-llama.backup`
+shows the last run's exit code. Check `~/Library/Logs/task-a-llama/backup.err`.
+Most common cause: path substitutions (`__BIN_DIR__`, `__LOG_DIR__`) were
+not applied when the template was copied.

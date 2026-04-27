@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LaunchAgent template for nightly task-a-llama backups.
+
+  This file is a template. Before installing, replace:
+    __BIN_DIR__      Absolute path to the framework repo's bin/ directory
+                     (e.g. /Users/you/code/task-a-llama/bin)
+    __LOG_DIR__      Absolute path for log files
+                     (e.g. /Users/you/Library/Logs/task-a-llama)
+
+  Install:
+    mkdir -p ~/Library/Logs/task-a-llama
+    mkdir -p ~/Library/LaunchAgents
+    cp bin/launchd/com.task-a-llama.backup.plist ~/Library/LaunchAgents/
+    # edit the installed copy to substitute paths, then:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+
+  Uninstall:
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+    rm ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+
+  The default uses --commit (git commit the SQL dump in the data repo) but
+  does NOT --push. Enabling --push requires launchd to reach SSH keys, which
+  is non-trivial; easier to run a periodic `git push` from a user shell.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.task-a-llama.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BIN_DIR__/backup.sh</string>
+    <string>--commit</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/backup.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/backup.err</string>
+</dict>
+</plist>
