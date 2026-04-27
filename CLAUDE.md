@@ -153,6 +153,50 @@ User repos must remain tal-unaware: do not introduce per-repo
 in Vikunja project descriptions (see the skill's `tal-meta` block
 convention), which are environment-scoped by construction.
 
+## Related repos and how to locate them
+
+There are four task-a-llama repos (framework, skills, overlay, data).
+Their local paths are **user-configured** and must not be assumed.
+
+### Canonical source: config.yml
+
+`config.yml` (gitignored; schema in `config.example.yml`) is the
+authoritative map of all repo paths. Read it first:
+
+```bash
+cat ~/src/task-a-llama/config.yml
+```
+
+The `sources:` block lists `local:` paths for `public_skills`,
+`private_skills`, and `data`. Use these paths when you need to read
+or modify source files in a sibling repo.
+
+### Fast lookup: follow the stow symlinks
+
+Skills are stowed into `~/.claude/skills/`. Each entry is a symlink
+pointing directly at its source repo:
+
+```bash
+ls -la ~/.claude/skills/
+```
+
+For example: `~/.claude/skills/tal -> <skills-repo>/adapters/claude-code/.claude/skills/tal`
+
+Following any symlink gives the source repo root without reading
+`config.yml`.
+
+### What to read for skill behaviour
+
+After a `/clear` or in a fresh session, the stowed files at
+`~/.claude/skills/tal/` are always reachable and always current
+(they are the source, via symlink). Read:
+
+- `~/.claude/skills/tal/SKILL.md` -- entry point and operation index
+- `~/.claude/skills/tal/references/*.md` -- detailed operation specs
+
+The overlay config (user-specific label vocabulary, project aliases,
+conventions) lives at `~/.config/task-a-llama/overlay.yml`.
+
 ## Source references
 
 Vikunja's own source code is checked out at `repos/vikunja/` (gitignored).
