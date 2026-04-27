@@ -225,21 +225,26 @@ These parts of Vikunja's model are real but off the v1 capture path:
 - **Kanban bucket positioning** - per-view, out of scope for skill
   capture.
 
-## Open questions (summary)
+## Resolved policy (Phase 2)
 
-Explicit decisions wanted before Phase 2 skill implementation:
+The four design questions originally flagged here (pointer file scope,
+label auto-create, project auto-create UX, batch cap) were resolved
+during Phase 2 implementation. Decisions:
 
-1. `.task-a-llama/project` pointer file: committed convention or
-   gitignored personal convention? (Recommendation: gitignored.)
-2. Auto-create labels on first use: yes for `src:*` and `state:*`,
-   refuse for `context:*`? Or uniformly one policy?
-3. Project auto-create: prompt on first use, or silently create?
-   (Recommendation: show-and-confirm on the first batch, silently
-   create on subsequent batches in the same directory once a pointer
-   file exists.)
-4. Should the skill cap bulk-capture batch size (e.g. warn on > 20
-   at once) to catch prompt-injection-style attempts?
+1. **Pointer file**: gitignored personal convention by default
+   (`.task-a-llama/` belongs in `~/.gitignore_global`). Users opt in
+   to committing it for team-shared mappings.
+2. **Label auto-create**: yes for `src:*` and `state:*` (small known
+   vocabularies); refuse for `context:*` (typo guard - customer
+   labels are pre-seeded via the overlay's `customers:` list).
+3. **Project auto-create**: paraphrase + confirm on the first
+   capture in a directory; silently resolve on subsequent captures
+   once the pointer file exists.
+4. **Batch cap**: warn at > 20 tasks per batch; refuse at > 50
+   unless the user explicitly types `force`.
 
-Answers to these will land in the Phase 2 skill itself as comments in
-`SKILL.md` or as config knobs in a skill-side YAML - not in this
-framework repo.
+The authoritative source is the skill itself:
+[`task-a-llama-skills`](https://github.com/javabrett/task-a-llama-skills),
+specifically `adapters/claude-code/.claude/skills/tal/SKILL.md`
+(safety contract) and `references/capture.md` (project resolution and
+label policy algorithms).

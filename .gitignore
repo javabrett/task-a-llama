@@ -32,3 +32,6 @@ backups/
 scratch/
 
 repos/
+
+# Per-directory Vikunja project pointer (personal, gitignored by convention)
+.task-a-llama/

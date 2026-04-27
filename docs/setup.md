@@ -121,18 +121,77 @@ docker exec vikunja /app/vikunja/vikunja user create \
   --password "$(openssl rand -base64 18)"
 ```
 
-## 5. Create an API token (for Phase 2)
+## 5. Create an API token and install the `/tal` skill
 
-Phase 1 does not require an API token - the infrastructure runs without
-Claude Code integration. When you're ready for Phase 2 (the `/tal` skill):
+The Claude Code integration uses a Vikunja API token plus a stowed skill.
+Both are one-time setup.
 
-1. In Vikunja: Settings -> API Tokens -> Create token
-2. Copy the `tk_...` value
-3. Paste it into `~/vikunja/.env` as `VIKUNJA_API_TOKEN`
-4. `./bin/restart.sh`
+### Create the token
 
-Scope the token narrowly to the operations your skill will need (Vikunja's
-token UI lets you pick specific routes).
+```bash
+./bin/first-run.sh
+```
+
+This opens the Vikunja API Tokens UI in your browser, prompts you to paste
+the `tk_...` value, verifies it against the API, and writes it to
+`~/vikunja/.env`. Re-running it is a no-op when a real token is already
+present.
+
+If you prefer to do it manually:
+
+1. In Vikunja: Settings -> API Tokens -> Create. Name it `claude-code`.
+   Scope to the minimum: projects, tasks, labels (read + write).
+2. Copy the `tk_...` value.
+3. Replace the placeholder in `~/vikunja/.env`:
+   `VIKUNJA_API_TOKEN=tk_...`. No restart needed - the skill reads the
+   file on demand.
+
+### Install the skill
+
+The `/tal` skill ships from the [task-a-llama-skills](https://github.com/javabrett/task-a-llama-skills)
+repo. Clone and link it:
+
+```bash
+git clone https://github.com/javabrett/task-a-llama-skills ~/src/task-a-llama-skills
+mkdir -p ~/.claude/skills
+ln -s ~/src/task-a-llama-skills/adapters/claude-code/.claude/skills/tal \
+      ~/.claude/skills/tal
+```
+
+Confirm:
+
+```bash
+ls -la ~/.claude/skills/tal/SKILL.md   # should resolve through the symlink
+```
+
+In any Claude Code session, try:
+
+```
+add a todo to vikunja: write the phase 2 retro
+```
+
+The skill matches on natural-language phrases and asks for confirmation
+before creating anything. See `~/.claude/skills/tal/SKILL.md` for the
+full safety contract and the working-directory -> project mapping rules.
+
+### Optional: install the backup LaunchAgent
+
+```bash
+./bin/install-launchd.sh
+```
+
+Loads `bin/launchd/com.task-a-llama.backup.plist` into launchd to run
+`backup.sh --commit` daily at 04:00. Idempotent. Uninstall with
+`./bin/install-launchd.sh --uninstall`. See
+[backup-restore.md](backup-restore.md) for details.
+
+### Optional: global Claude Code awareness
+
+[`global-claude-md-proposal.md`](global-claude-md-proposal.md) drafts a
+small section to add to your `~/.claude/CLAUDE.md` so Claude Code
+understands the framework's conventions across all sessions. Read and
+paste by hand; the framework deliberately doesn't auto-edit your global
+config.
 
 ## 6. Verify
 
@@ -145,8 +204,9 @@ open http://localhost:3456           # UI responds, you can log in
 ./bin/down.sh                        # stack stops cleanly
 ```
 
-At this point you have a running, backup-able Vikunja. AI integration lands
-in a follow-up session - see [README.md](../README.md) and the Phase 2 plan.
+In Claude Code (after installing the skill): ask "what's open in vikunja?"
+or "add a todo to vikunja: ..." and confirm the skill responds with a
+paraphrase before creating anything.
 
 ## Troubleshooting
 

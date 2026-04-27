@@ -61,20 +61,13 @@ It runs `backup.sh --commit` daily at 04:00 local time.
 ### Install
 
 ```bash
-# 1. Set up the log directory
-mkdir -p ~/Library/Logs/task-a-llama
-
-# 2. Copy the template and substitute paths
-mkdir -p ~/Library/LaunchAgents
-sed \
-  -e "s#__BIN_DIR__#$HOME/code/task-a-llama/bin#g" \
-  -e "s#__LOG_DIR__#$HOME/Library/Logs/task-a-llama#g" \
-  bin/launchd/com.task-a-llama.backup.plist \
-  > ~/Library/LaunchAgents/com.task-a-llama.backup.plist
-
-# 3. Load it
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+./bin/install-launchd.sh
 ```
+
+The helper substitutes the framework `bin/` and log paths into the
+template, writes the result to `~/Library/LaunchAgents/`, then
+`launchctl bootstrap`s it. Idempotent: re-running cleanly replaces a
+prior load.
 
 ### Check it
 
@@ -92,8 +85,21 @@ launchctl kickstart gui/$(id -u)/com.task-a-llama.backup
 ### Uninstall
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
-rm ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+./bin/install-launchd.sh --uninstall
+```
+
+### Manual install (fallback)
+
+If you want to do it by hand:
+
+```bash
+mkdir -p ~/Library/Logs/task-a-llama ~/Library/LaunchAgents
+sed \
+  -e "s#__BIN_DIR__#$PWD/bin#g" \
+  -e "s#__LOG_DIR__#$HOME/Library/Logs/task-a-llama#g" \
+  bin/launchd/com.task-a-llama.backup.plist \
+  > ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
 ```
 
 ### Why no `--push` in the LaunchAgent
