@@ -131,6 +131,32 @@ Restores the database only. Attachments in `runtime_dir/files/` are left
 alone. Use this when the binary snapshots are gone and you only have the
 Git-tracked SQL dump.
 
+### Credentials after a nuke + restore
+
+When you nuke and then run bootstrap before restoring, bootstrap creates a
+fresh account and prints a new password. That account exists only in the
+empty database bootstrap started with -- as soon as restore replaces the
+database with your backup, that account is gone.
+
+After a restore you need your **pre-nuke credentials**, not the ones bootstrap
+just printed. If you no longer have them, reset the password via the Vikunja
+CLI (the stack must be running):
+
+```bash
+# Find the user ID
+docker exec vikunja /app/vikunja/vikunja user list
+
+# Generate a new password and reset it directly (no email required)
+new_pass="$(openssl rand -base64 18)"
+docker exec vikunja /app/vikunja/vikunja user reset-password \
+  --direct \
+  --password "$new_pass" \
+  <user-id>
+echo "New password: $new_pass"
+```
+
+Save the new password in your password manager.
+
 ## Full disaster recovery from scratch
 
 You lost everything on the local machine. You have:
@@ -163,7 +189,10 @@ $EDITOR config.yml       # confirm paths
 ```
 
 At step 6 the restore script starts the stack back up for you. Log in with
-your original credentials; all tasks, projects, and labels come back.
+your pre-disaster credentials (not the ones bootstrap printed in step 4 --
+those were for the empty database and are now superseded by the restore).
+If you don't have them, see "Credentials after a nuke + restore" above.
+All tasks, projects, and labels come back.
 
 Attachments (if you had any) are not recoverable from the SQL dump alone -
 they live only in binary snapshots. For a TODO workflow this is usually
@@ -187,6 +216,11 @@ setup.
 **Pruned too aggressively** - increase `backup.retention_days` in
 `config.yml`. The prune only touches files matching `task-a-llama-*.tgz`;
 anything else parked in `binary_dir` is untouched.
+
+**Wrong username or password after restore** - if you restored a backup after
+a nuke + bootstrap cycle, the credentials bootstrap printed are for the
+empty database and no longer apply. Use your pre-nuke credentials, or reset
+via the CLI (see "Credentials after a nuke + restore" above).
 
 **LaunchAgent silently does nothing** - `launchctl print gui/$(id -u)/com.task-a-llama.backup`
 shows the last run's exit code. Check `~/Library/Logs/task-a-llama/backup.err`.
