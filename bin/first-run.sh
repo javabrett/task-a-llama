@@ -51,12 +51,13 @@ fi
 
 tal_log ""
 tal_log "Opening the Vikunja API Tokens UI in your browser..."
+tal_log "  URL: ${web_base}/user/settings/api-tokens"
 tal_log "  Steps to follow there:"
 tal_log "    1. Click 'Create token'."
 tal_log "    2. Name it: claude-code (or claude-code-test for the test instance)"
 tal_log "    3. Scope to the minimum: projects, tasks, labels (read + write)."
 tal_log "    4. Copy the tk_... value."
-open "${web_base}/api-tokens" 2>/dev/null || tal_warn "Could not auto-open browser; visit ${web_base}/api-tokens manually."
+open "${web_base}/user/settings/api-tokens" 2>/dev/null || tal_warn "Could not auto-open browser; visit ${web_base}/user/settings/api-tokens manually."
 tal_log ""
 
 token=""
