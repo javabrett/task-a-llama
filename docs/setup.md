@@ -13,7 +13,7 @@ All installed and on `PATH`:
 | Docker (with `docker compose` subcommand) | Runs the Vikunja container | Docker Desktop, [OrbStack](https://orbstack.dev/), or [Colima](https://github.com/abiosoft/colima) |
 | `yq` | Parses `config.yml` | `brew install yq` |
 | `sqlite3` | Used by backup / restore scripts | Ships with macOS; otherwise `brew install sqlite` |
-| `git` | Clones the public skills repo (Phase 2 onward) | `xcode-select --install` or `brew install git` |
+| `git` | Clones the public skills repo | `xcode-select --install` or `brew install git` |
 | `openssl` | Generates the JWT secret | Ships with macOS |
 
 `bin/bootstrap.sh` checks all of these and fails fast with a clear hint if
@@ -27,9 +27,9 @@ cd ~/src/task-a-llama
 ```
 
 The framework repo lives at `~/src/task-a-llama` in these examples. You can
-put it anywhere; `config.yml` records the separate runtime directory.
+put it anywhere; `config.yml` records the companion repo paths.
 
-## Companion repos (optional for Phase 1)
+## Companion repos (optional initially)
 
 `task-a-llama` orchestrates three companion repos via `config.yml`. None of
 them need to exist for Vikunja to run; bootstrap warns and continues if they
@@ -37,15 +37,12 @@ are absent.
 
 | Repo | Purpose | Required for |
 | --- | --- | --- |
-| `task-a-llama-skills` | Public skills repo -- the `/tal` Claude Code skill | Phase 2 (not built yet) |
-| `task-a-llama-overlay` | Private skills overlay, managed by your mac-setup dotfiles | Phase 2 |
+| `task-a-llama-skills` | Public skills repo -- the `/tal` Claude Code skill | Skill usage |
+| `task-a-llama-overlay` | Private skills overlay, managed by your mac-setup dotfiles | Custom conventions |
 | `task-a-llama-pasture` | SQL dump history -- committed by `backup.sh --commit` | Backup `--commit`/`--push` flags |
 
 Bootstrap will clone `task-a-llama-skills` automatically once it exists. The
 other two are never cloned by bootstrap; you manage them yourself.
-
-For a Phase 1 install you can leave all three paths as placeholders in
-`config.yml` and address them when Phase 2 lands.
 
 ## 2. Configure
 
@@ -56,7 +53,6 @@ $EDITOR config.yml
 
 At minimum, confirm:
 
-- `runtime_dir` - where Vikunja's live data will live. Default `~/vikunja`.
 - `sources.public_skills.local` - where to clone the public skills repo.
 - `sources.private_skills.path` - expected path; bootstrap only verifies.
 - `sources.data.local` - where the `task-a-llama-pasture` data repo lives.
@@ -64,34 +60,46 @@ At minimum, confirm:
 
 Paths may use a leading `~` - the scripts expand it safely.
 
-`.env` is seeded automatically on the first bootstrap run (see next step).
+The Docker runtime directory (`~/vikunja-<slug>/`) is derived automatically
+from the slug name; it is not configured in `config.yml`.
 
-## 3. Run bootstrap
+## 3. Bootstrap the prod slug
 
 ```bash
-./bin/bootstrap.sh
+./bin/bootstrap.sh prod
 ```
 
 This:
 
 1. Validates prerequisites
-2. Creates `runtime_dir/{db,files}`
-3. Symlinks `docker-compose.yml` into `runtime_dir`
-4. Creates `runtime_dir/.env` from `.env.example` and generates a JWT secret
-5. Clones the public skills repo if configured (warning, not fatal, if the
-   remote doesn't exist yet)
-6. Verifies the private skills and data repo paths exist (warning only -
+2. Creates `~/vikunja-prod/{db,files}`
+3. Symlinks `docker-compose.yml` into `~/vikunja-prod/`
+4. Creates `~/vikunja-prod/.env` from `.env.example` and generates a JWT secret
+5. Creates `~/.config/task-a-llama/prod/env` with a placeholder API token
+6. Clones the public skills repo if configured (warning, not fatal, if the
+   remote does not exist yet)
+7. Verifies the private skills and data repo paths exist (warning only -
    bootstrap never clones private repos for you)
-7. Offers to bring the stack up with `docker compose up -d`
+8. Offers to bring the stack up with `docker compose up -d`
 
 Bootstrap is idempotent. Re-running it is safe; each step is a no-op when
 already complete. Steps that could clobber local edits (e.g. `.env`) are
 left alone if they exist.
 
-After the first run, review `runtime_dir/.env` and confirm `TZ` matches your
-actual timezone.
+`TZ` and `VIKUNJA_SERVICE_TIMEZONE` are auto-populated from `/etc/localtime`
+so the container timezone matches your system.
 
-## 4. First login
+## 4. Set the active slug
+
+```bash
+./bin/mode.sh prod
+```
+
+This verifies the stack is reachable and writes `prod` to
+`~/.config/task-a-llama/active`. All subsequent `bin/` and `/tal` operations
+default to this slug when no slug argument is given.
+
+## 5. First login
 
 When bootstrap brings the stack up for the first time, it creates your initial
 account automatically via the Vikunja CLI running inside the container. No
@@ -115,36 +123,35 @@ If you brought the stack up separately (e.g. `./bin/up.sh`), create the account
 manually the same way bootstrap does:
 
 ```bash
-docker exec vikunja /app/vikunja/vikunja user create \
+docker exec vikunja-prod /app/vikunja/vikunja user create \
   --username admin \
   --email    admin@localhost \
   --password "$(openssl rand -base64 18)"
 ```
 
-## 5. Create an API token and install the `/tal` skill
+## 6. Create an API token and install the `/tal` skill
 
 The Claude Code integration uses a Vikunja API token plus a stowed skill.
-Both are one-time setup.
+Both are one-time setup per slug.
 
 ### Create the token
 
 ```bash
-./bin/first-run.sh
+./bin/first-run.sh prod
 ```
 
 This opens the Vikunja API Tokens UI in your browser, prompts you to paste
 the `tk_...` value, verifies it against the API, and writes it to
-`~/vikunja/.env`. Re-running it is a no-op when a real token is already
-present.
+`~/.config/task-a-llama/prod/env`. Re-running it is a no-op when a real
+token is already present.
 
 If you prefer to do it manually:
 
-1. In Vikunja: Settings -> API Tokens -> Create. Name it `claude-code`.
+1. In Vikunja: Settings -> API Tokens -> Create. Name it `claude-code-prod`.
    Scope to the minimum: projects, tasks, labels (read + write).
 2. Copy the `tk_...` value.
-3. Replace the placeholder in `~/vikunja/.env`:
-   `VIKUNJA_API_TOKEN=tk_...`. No restart needed - the skill reads the
-   file on demand.
+3. Edit `~/.config/task-a-llama/prod/env` and set `VIKUNJA_API_TOKEN=tk_...`.
+   No restart needed - the skill reads the file on demand.
 
 ### Install the skill
 
@@ -177,11 +184,11 @@ full safety contract and the working-directory -> project mapping rules.
 ### Optional: install the backup LaunchAgent
 
 ```bash
-./bin/install-launchd.sh
+./bin/install-launchd.sh prod
 ```
 
 Loads `bin/launchd/com.task-a-llama.backup.plist` into launchd to run
-`backup.sh --commit` daily at 04:00. Idempotent. Uninstall with
+`backup.sh prod --commit` daily at 04:00. Idempotent. Uninstall with
 `./bin/install-launchd.sh --uninstall`. See
 [backup-restore.md](backup-restore.md) for details.
 
@@ -193,20 +200,20 @@ understands the framework's conventions across all sessions. Read and
 paste by hand; the framework deliberately doesn't auto-edit your global
 config.
 
-## 6. Verify
+## 7. Verify
 
 Manual checks:
 
 ```bash
-./bin/up.sh                          # stack is up
+./bin/up.sh prod                     # stack is up
 open http://localhost:3456           # UI responds, you can log in
-./bin/backup.sh                      # produces both a .tgz and a SQL dump
-./bin/down.sh                        # stack stops cleanly
+./bin/backup.sh prod                 # produces both a .tgz and a SQL dump
+./bin/down.sh prod                   # stack stops cleanly
 ```
 
 In Claude Code (after installing the skill): ask "what's open in vikunja?"
 or "add a todo to vikunja: ..." and confirm the skill responds with a
-paraphrase before creating anything.
+paraphrase before creating anything. The response will be prefixed `[prod]`.
 
 ## Troubleshooting
 
@@ -220,23 +227,34 @@ Homebrew), not the Python wrapper.
 you on its first run and then exit so you can edit it. Re-run bootstrap
 once you're happy with the config.
 
-**`runtime_dir does not exist`** (from `up.sh` etc.) - you haven't run
-`bootstrap.sh` yet. Run it first.
+**No active environment selected** - run `bin/mode.sh <slug>` to set the
+active slug before running commands without an explicit slug argument.
 
-**Port 3456 already in use** - change the host-side port in
-`docker-compose.yml` (the `"127.0.0.1:3456:3456"` line) and re-run bootstrap.
+**Port 3456 already in use** - choose a different port when bootstrap prompts
+for it (or pass a different slug, e.g. `bin/bootstrap.sh myprod`).
 
 **Can't log in after a fresh install** - check that bootstrap completed
 successfully. If you brought the stack up manually, create the initial account
-via `docker exec` (see step 4 above).
+via `docker exec` (see step 5 above).
 
 See [docs/backup-restore.md](backup-restore.md) for backup / restore workflows
 and [docs/design-decisions.md](design-decisions.md) for the rationale behind
 these choices.
 
-## Optional: isolated test stack
+## Running multiple environments
 
-Once you're using `/tal` for real task management, you'll want to keep test
-data and exploratory work out of your production Vikunja. The framework
-supports a fully isolated second stack on port 4567. See
-[docs/test-stack.md](test-stack.md) for setup and switching.
+Once you are using `/tal` for real task management, you may want a disposable
+test slug. See [docs/multi-environment.md](multi-environment.md) for setup
+and switching.
+
+## Migrating from an older prod/test layout
+
+If you installed the framework before the slug restructuring:
+
+```bash
+./bin/migrate-to-slugs.sh
+```
+
+This is a one-shot, idempotent migration that moves `~/vikunja/` to
+`~/vikunja-prod/`, splits the API token and URL out of `.env` into
+`~/.config/task-a-llama/prod/env`, and renames `active-mode` to `active`.

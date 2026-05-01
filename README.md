@@ -45,19 +45,22 @@ It's designed for people who want Asana-style lightweight task management with t
 │              │                                              │
 │              │ bind mounts                                  │
 │              ▼                                              │
-│    ~/vikunja/db/vikunja.db       (SQLite — the data)        │
-│    ~/vikunja/files/               (attachments)             │
-│    ~/vikunja/.env                 (secrets, gitignored)     │
+│    ~/vikunja-prod/db/vikunja.db   (SQLite -- the data)      │
+│    ~/vikunja-prod/files/          (attachments)             │
+│    ~/vikunja-prod/.env            (Docker secrets)          │
+│    ~/.config/task-a-llama/prod/env  (URL + API token)       │
 │                                                             │
 │     ▲                 ▲                    ▲                │
 │     │                 │                    │                │
 │  Claude Code      Web browser        (optional later)       │
-│  (bash / MCP /    (localhost UI)     Apple Reminders        │
-│   direct SQLite)                     via CalDAV             │
+│  (bash / REST     (localhost UI)     Apple Reminders        │
+│   API only)                          via CalDAV             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 Three access vectors, one source of truth. The web UI handles quick-check and touch-up; Claude Code handles capture, bulk work, and reporting; CalDAV (optional) would handle mobile sync if you later decide to expose Vikunja beyond localhost.
+
+Multiple named environments (slugs) can coexist — a local `prod` stack and a `test` stack, or local stacks alongside Vikunja Cloud. Each slug carries its own URL and token; `bin/mode.sh <slug>` switches between them.
 
 ---
 
@@ -118,22 +121,27 @@ No daemon processes beyond the Docker containers. No cloud dependencies. No acco
 git clone https://github.com/javabrett/task-a-llama ~/src/task-a-llama
 cd ~/src/task-a-llama
 
-# 2. Copy config template and fill in your paths and timezone
+# 2. Copy config template and fill in your paths
 cp config.example.yml config.yml
 $EDITOR config.yml
 
-# 3. Bootstrap — validates prereqs, seeds .env with a generated JWT secret,
-#    sets up runtime_dir, and offers to bring the stack up
-./bin/bootstrap.sh
-# (bootstrap warns if companion repos are absent — that's fine for Phase 1)
+# 3. Bootstrap the prod slug -- validates prereqs, seeds the Docker .env with
+#    a generated JWT secret, and creates the TAL-side env file
+./bin/bootstrap.sh prod
 
-# 4. First login - bootstrap prints credentials when the stack comes up
+# 4. Bring the stack up and set the active slug
+./bin/up.sh prod
+./bin/mode.sh prod
+
+# 5. First login - bootstrap prints credentials when the stack comes up
 open http://localhost:3456
 # Log in with the username/password printed by bootstrap.
 # Save them in your password manager.
 
-# 5. Create a Vikunja API token for Claude Code (Phase 2 onward)
-# In Vikunja: Settings -> API Tokens -> Create. Add to ~/vikunja/.env as VIKUNJA_API_TOKEN.
+# 6. Create a Vikunja API token for Claude Code
+# In Vikunja: Settings -> API Tokens -> Create.
+# Then run the token setup script:
+./bin/first-run.sh prod
 ```
 
 Full setup details in [docs/setup.md](docs/setup.md).
@@ -148,7 +156,7 @@ A few choices that shape how this project feels in use:
 Postgres is overkill for single-user task management. SQLite gives us a single-file database that's trivially backup-able, grep-able with `sqlite3 .dump`, readable by any tool in the ecosystem, and fast enough for personal scale. If you ever outgrow it, Vikunja supports migrating to Postgres — but you almost certainly won't.
 
 ### Bind mounts over named Docker volumes
-The data lives in `~/vikunja/db/` on the host filesystem, not inside Docker's opaque storage. This means migrating Docker runtimes (Docker Desktop → OrbStack, say) is a 30-second operation with no data movement. It also means `tar czf vikunja.tgz ~/vikunja` is a complete backup.
+The data lives in `~/vikunja-<slug>/db/` on the host filesystem, not inside Docker's opaque storage. This means migrating Docker runtimes (Docker Desktop to OrbStack, say) is a 30-second operation with no data movement. It also means `tar czf vikunja.tgz ~/vikunja-prod` is a complete backup of that slug.
 
 ### SQL dumps in Git over binary snapshots
 Binary SQLite files in Git work technically but waste space and lose diff-ability. Committing `sqlite3 .dump` output as plain SQL means Git's delta compression actually works, and `git diff` shows you exactly which tasks changed between backups. The data repo becomes a readable history of your task life.
@@ -172,7 +180,7 @@ Three layers, automated via LaunchAgent:
 2. **SQL dump to Git** — `sqlite3 .dump` writes a text representation of the entire database. Committed to the `task-a-llama-pasture` repo on every backup cycle. Diffable, compressible, portable across SQLite versions.
 3. **Attachments folder** — only matters if tasks have attachments. Included in the tarball backup but usually empty for TODO-style workflows.
 
-Restore is equally straightforward: stop Vikunja, replace `~/vikunja/db/vikunja.db` with a snapshot, restart. See [docs/backup-restore.md](docs/backup-restore.md).
+Restore is equally straightforward: stop Vikunja, replace `~/vikunja-<slug>/db/vikunja.db` with a snapshot, restart. See [docs/backup-restore.md](docs/backup-restore.md).
 
 ---
 

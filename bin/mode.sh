@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
-# mode.sh - flip the /tal skill between production and test backends.
+# mode.sh - set or read the active task-a-llama environment slug.
 #
-# State lives at ~/.config/task-a-llama/active-mode (one line: "production"
-# or "test"). The /tal skill reads this file each turn to pick which
-# backend's .env, port, and token to use. Mid-session switching: no Claude
-# restart required.
+# State lives at ~/.config/task-a-llama/active (one line: the slug name).
+# The /tal skill reads this file on each turn to select the right
+# backend URL and API token. Mid-session switching: no Claude restart needed.
 #
 # Usage:
-#   mode.sh                 # print current mode
-#   mode.sh production      # switch to production
-#   mode.sh test            # switch to test
-#
-# Idempotent: writing the current mode again is a no-op.
+#   mode.sh               # print active slug
+#   mode.sh <slug>        # switch to the named slug (must have a TAL env file)
 
 set -euo pipefail
 
-mode_file="${HOME}/.config/task-a-llama/active-mode"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
+
+active_file="${HOME}/.config/task-a-llama/active"
 
 print_current() {
-  if [[ -f "$mode_file" ]]; then
+  if [[ -f "$active_file" ]]; then
     local current
-    current="$(tr -d '[:space:]' < "$mode_file")"
-    echo "${current:-production}"
+    current="$(tr -d '[:space:]' < "$active_file")"
+    if [[ -n "$current" ]]; then
+      echo "$current"
+    else
+      echo "(no active slug)"
+    fi
   else
-    echo "production"
+    echo "(no active slug)"
   fi
 }
 
@@ -32,19 +34,31 @@ if [[ $# -eq 0 ]]; then
   exit 0
 fi
 
-target="$1"
-case "$target" in
-  production|test) ;;
+case "$1" in
   -h|--help)
-    sed -n '2,15p' "${BASH_SOURCE[0]}"
+    sed -n '2,9p' "${BASH_SOURCE[0]}"
     exit 0
-    ;;
-  *)
-    echo "error: unknown mode '${target}' (valid: production, test)" >&2
-    exit 1
     ;;
 esac
 
-mkdir -p "$(dirname "$mode_file")"
-echo "$target" > "$mode_file"
-echo "Active mode: ${target}"
+slug="$(config_resolve_slug "$1")"
+
+tal_env_file="$(config_slug_env "$slug")"
+[[ -f "$tal_env_file" ]] || tal_die "no env file for slug '${slug}' at ${tal_env_file}. Run ./bin/bootstrap.sh ${slug} first."
+
+# Verify the target is reachable before committing the switch.
+_base_url="$(slug_get "$slug" VIKUNJA_BASE_URL)"
+_base_url="${_base_url:-http://localhost:3456/api/v1}"
+_web_base="${_base_url%/api/v1}"
+
+tal_log "Checking ${_web_base}..."
+if ! curl -sf "${_base_url}/info" >/dev/null 2>&1; then
+  case "$(detect_backend_mode "$_base_url")" in
+    cloud)   tal_die "Vikunja Cloud is not responding at ${_web_base}. Check your network connection, then retry." ;;
+    *)       tal_die "Stack is not running at ${_web_base}. Start it with bin/up.sh ${slug}, then retry." ;;
+  esac
+fi
+
+mkdir -p "$(dirname "$active_file")"
+echo "$slug" > "$active_file"
+echo "[task-a-llama] Active slug: ${slug} (${_web_base})"

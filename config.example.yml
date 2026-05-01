@@ -2,10 +2,10 @@
 #
 # Copy this file to config.yml and adjust values for your setup.
 # config.yml is gitignored; this example file documents the schema.
-
-# Where Vikunja's runtime directory lives on the host filesystem.
-# Bind mounts for db/ and files/ are created here.
-runtime_dir: ~/vikunja
+#
+# Note: runtime_dir is no longer a config knob. Each named environment slug
+# uses ~/vikunja-<slug>/ as its Docker runtime dir (created by bootstrap.sh).
+# TAL-side config (URL, token) lives in ~/.config/task-a-llama/<slug>/env.
 
 # Related repositories the framework orchestrates.
 # Each entry declares where the repo lives locally and (optionally) how

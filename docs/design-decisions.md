@@ -48,15 +48,18 @@ realistically this won't happen at personal scale.
 
 ## Why Bind Mounts (rather than named Docker volumes)
 
-Data lives in `~/vikunja/db/` and `~/vikunja/files/` on the host filesystem.
+Data lives in `~/vikunja-<slug>/db/` and `~/vikunja-<slug>/files/` on the
+host filesystem.
 
 Reasons:
 
 - Data is inspectable and backup-able with ordinary filesystem tools
-- Migration between Docker runtimes (Docker Desktop → OrbStack → Colima) is
+- Migration between Docker runtimes (Docker Desktop to OrbStack to Colima) is
   a 30-second operation with no data movement
-- A `tar czf` of `~/vikunja/` is a complete backup
+- A `tar czf` of `~/vikunja-prod/` is a complete backup of that slug
 - Bypasses Docker's opaque storage layer entirely
+- Each slug gets its own directory, so multiple environments are trivially
+  isolated with no naming conflicts
 
 Named volumes are slightly faster and better-isolated, but the tradeoff
 favours transparency and portability for this use case.

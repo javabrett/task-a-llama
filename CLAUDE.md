@@ -50,25 +50,46 @@ a direct URL to the affected resource after any successful mutation:
 - Task: `<WEB_BASE>/tasks/{id}`
 - Comment: `<WEB_BASE>/tasks/{task_id}#comment-{comment_id}`
 
-`WEB_BASE` is `http://localhost:3456` in production and `http://localhost:4567`
-in test mode (see `docs/test-stack.md`). The `/tal` skill resolves it from
-the active mode's `.env` file.
+`WEB_BASE` is derived from `VIKUNJA_BASE_URL` in the active slug's TAL-side env
+(`~/.config/task-a-llama/<slug>/env`) by stripping `/api/v1`. The `/tal` skill
+resolves it automatically from the active slug.
 
 This applies whether the call is a one-off debug curl or part of a skill
 operation. Don't make the user hunt in the UI.
 
-## Production / test stack split
+## Named environment slugs
 
-Two isolated Vikunja stacks can run side-by-side:
+The framework supports unlimited named environment slugs (e.g. `prod`, `test`,
+`cloud1`). Each slug has its own URL + API token and, for local stacks, its own
+Docker runtime directory.
 
-- Production: `~/vikunja/` (port 3456, container `vikunja`) - the gold copy
-- Test: `~/vikunja-test/` (port 4567, container `vikunja-test`) - disposable
+Layout:
+
+```
+~/.config/task-a-llama/
+  active                        # current slug (one line)
+  prod/env                      # VIKUNJA_BASE_URL + VIKUNJA_API_TOKEN
+  test/env
+  cloud1/env
+
+~/vikunja-prod/                 # local Docker stack only
+  .env                          # JWT secret, port, container name, TZ, ...
+  db/vikunja.db
+~/vikunja-test/
+  .env
+```
 
 All lifecycle scripts (`bin/up.sh`, `down.sh`, `nuke.sh`, `backup.sh`,
-`first-run.sh`, `bootstrap.sh`) accept an `[production|test]` argument,
-defaulting to `production`. The `/tal` skill switches between them via
-`~/.config/task-a-llama/active-mode` (file-based mode signal). See
-`docs/test-stack.md` for setup and usage.
+`first-run.sh`, `bootstrap.sh`) accept an optional `[<slug>]` argument,
+defaulting to the active slug in `~/.config/task-a-llama/active`. The `/tal`
+skill switches slugs via `bin/mode.sh` and prefixes every response with
+`[<slug>]`. See `docs/multi-environment.md` for setup and usage.
+
+To migrate an existing prod/test install to the slug layout:
+
+```bash
+bin/migrate-to-slugs.sh
+```
 
 ## Task ID system
 
@@ -134,19 +155,19 @@ poke Vikunja's data behind its back.
 
 ## Environment-bound state convention
 
-Two Vikunja stacks run side-by-side (production and test) with
-independent databases. Any client-side file that holds stack-specific
-values (numeric IDs, tokens, base URLs) must be either:
+Each slug has its own isolated Vikunja database. Any client-side file that holds
+slug-specific values (numeric IDs, tokens, base URLs) must be either:
 
-1. **Inside a mode-scoped directory** - e.g. `~/vikunja/.env` and
-   `~/vikunja-test/.env` are partitioned by stack root.
-2. **Namespaced by mode in its filename** - e.g. a hypothetical
-   future cache at `~/.config/task-a-llama/foo.json` for production
-   would have a sibling `~/.config/task-a-llama/foo.test.json` for
-   test. The skill picks the file by reading `active-mode`.
+1. **Inside a slug-scoped directory** - e.g. `~/.config/task-a-llama/prod/env`
+   and `~/.config/task-a-llama/test/env` are partitioned by slug.
+2. **Inside the slug's Docker runtime dir** - e.g. `~/vikunja-prod/.env` and
+   `~/vikunja-test/.env` for local stacks.
 
-`active-mode` itself is the global selector and is correctly the only
-unscoped file under `~/.config/task-a-llama/`.
+A hypothetical future cache at `~/.config/task-a-llama/foo.json` would be a
+per-slug file placed at `~/.config/task-a-llama/<slug>/foo.json`.
+
+`active` (the global selector) is the only unscoped file under
+`~/.config/task-a-llama/`.
 
 User repos must remain tal-unaware: do not introduce per-repo
 `.task-a-llama/` directories or pointer files. Project bindings live
@@ -195,7 +216,8 @@ After a `/clear` or in a fresh session, the stowed files at
 - `~/.claude/skills/tal/references/*.md` -- detailed operation specs
 
 The overlay config (user-specific label vocabulary, project aliases,
-conventions) lives at `~/.config/task-a-llama/overlay.yml`.
+conventions) lives at `~/.config/task-a-llama/<slug>/overlay.yml` (per-slug)
+with a fallback to `~/.config/task-a-llama/overlay.yml` (global legacy).
 
 ## Source references
 

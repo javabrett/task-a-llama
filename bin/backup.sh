@@ -9,7 +9,7 @@
 #      Plain SQL for diffable Git history; overwrites each run.
 #
 # Usage:
-#   backup.sh [production|test] [flags]    # default: production
+#   backup.sh [<slug>] [flags]    # default: active slug
 #
 # Flags:
 #   --commit   After the dump, git-commit the data repo (no push).
@@ -17,8 +17,8 @@
 #   --no-prune Skip retention pruning (debugging / catastrophic-avoidance).
 #
 # The stack does NOT need to be stopped - .backup is online-safe.
-# Test-instance backups are unusual (test data is disposable); supported for
-# occasional save-points during destructive testing.
+# Cloud-slug backups no-op with an informational message (Vikunja Cloud
+# manages its own durability).
 
 set -euo pipefail
 
@@ -27,13 +27,12 @@ require_config
 require_cmd sqlite3
 require_cmd tar
 
-instance="production"
+slug=""
 do_commit=0
 do_push=0
 do_prune=1
 for arg in "$@"; do
   case "$arg" in
-    production|test) instance="$arg" ;;
     --commit) do_commit=1 ;;
     --push) do_commit=1; do_push=1 ;;
     --no-prune) do_prune=0 ;;
@@ -41,13 +40,14 @@ for arg in "$@"; do
       sed -n '2,21p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
-    *) tal_die "unknown argument: $arg" ;;
+    -*) tal_die "unknown argument: $arg" ;;
+    *)  slug="$arg" ;;
   esac
 done
 
-runtime_dir="$(config_runtime_dir "$instance")"
+slug="$(config_resolve_slug "$slug")"
 
-_base_url="$(env_get "$runtime_dir" VIKUNJA_BASE_URL)"
+_base_url="$(slug_get "$slug" VIKUNJA_BASE_URL)"
 _base_url="${_base_url:-http://localhost:3456/api/v1}"
 case "$(detect_backend_mode "$_base_url")" in
   cloud)
@@ -60,9 +60,11 @@ case "$(detect_backend_mode "$_base_url")" in
     exit 0
     ;;
   unknown)
-    tal_die "Cannot classify VIKUNJA_BASE_URL='${_base_url}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud)."
+    tal_die "Cannot classify VIKUNJA_BASE_URL='${_base_url}' for slug '${slug}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud)."
     ;;
 esac
+
+runtime_dir="$(config_runtime_dir "$slug")"
 
 db_file="${runtime_dir}/db/vikunja.db"
 files_dir="${runtime_dir}/files"

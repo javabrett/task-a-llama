@@ -16,8 +16,9 @@ stow-managed, and an automated edit there would be intrusive.
 ## task-a-llama
 
 Self-hosted Vikunja task manager runs as part of the `task-a-llama`
-framework at `~/src/task-a-llama` (framework) with runtime data at
-`~/vikunja/` (DB, attachments, .env). Companion repos:
+framework at `~/src/task-a-llama`. Named environment slugs store runtime
+data in `~/vikunja-<slug>/` (local stacks) or target Vikunja Cloud; the
+active slug is in `~/.config/task-a-llama/active`. Companion repos:
 `~/src/task-a-llama-skills` (public skills) and
 `~/src/task-a-llama-pasture` (SQL dump history).
 
@@ -44,15 +45,17 @@ repos do not need a `.task-a-llama/` directory.
 
 ### API and ad-hoc debugging
 
-API token lives in `~/vikunja/.env` as `VIKUNJA_API_TOKEN=tk_...`.
-Base URL: `http://localhost:3456/api/v1`. The skill's
+The active slug's token and base URL live in
+`~/.config/task-a-llama/<slug>/env`. The skill's
 `references/endpoints.md` carries the endpoint cheatsheet.
 
-For one-off debugging:
+For one-off debugging (replace `prod` with your active slug):
 
 \`\`\`bash
-TOKEN=$(grep '^VIKUNJA_API_TOKEN=' ~/vikunja/.env | cut -d= -f2-)
-curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:3456/api/v1/projects | jq
+SLUG=$(cat ~/.config/task-a-llama/active)
+TOKEN=$(grep '^VIKUNJA_API_TOKEN=' ~/.config/task-a-llama/"$SLUG"/env | cut -d= -f2-)
+BASE=$(grep '^VIKUNJA_BASE_URL=' ~/.config/task-a-llama/"$SLUG"/env | cut -d= -f2-)
+curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/projects" | jq
 \`\`\`
 
 ### Interaction with per-repo `CLAUDE.md`

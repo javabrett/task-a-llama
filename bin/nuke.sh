@@ -5,7 +5,7 @@
 # are never touched by this script.
 #
 # Usage:
-#   nuke.sh [production|test] [flags]
+#   nuke.sh [<slug>] [flags]    # default: active slug
 #
 # Flags:
 #   --keep-env       Leave runtime_dir/.env alone (default: removed)
@@ -15,16 +15,14 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
-require_config
 require_cmd docker
 
-instance="production"
+slug=""
 keep_env=0
 keep_compose=0
 skip_prompt=0
 for arg in "$@"; do
   case "$arg" in
-    production|test) instance="$arg" ;;
     --keep-env) keep_env=1 ;;
     --keep-compose) keep_compose=1 ;;
     --yes) skip_prompt=1 ;;
@@ -32,12 +30,14 @@ for arg in "$@"; do
       sed -n '2,14p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
-    *) tal_die "unknown argument: $arg" ;;
+    -*) tal_die "unknown argument: $arg" ;;
+    *) slug="$arg" ;;
   esac
 done
 
-require_local_backend "$instance"
-runtime_dir="$(config_runtime_dir "$instance")"
+slug="$(config_resolve_slug "$slug")"
+require_local_backend "$slug"
+runtime_dir="$(config_runtime_dir "$slug")"
 [[ -d "$runtime_dir" ]] || tal_die "runtime_dir does not exist: ${runtime_dir}"
 
 tal_log ""

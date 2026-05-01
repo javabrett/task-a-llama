@@ -7,7 +7,11 @@
 #   - require_cmd <bin> [install hint] - fail fast if a prereq is missing
 #   - config_get <yq-path> - read a value from config.yml
 #   - path_expand <path> - expand leading ~ without invoking eval
-#   - config_runtime_dir, config_backup_binary_dir, config_sql_dump_target, ...
+#   - Slug helpers: config_active_slug, config_resolve_slug, config_slug_env,
+#                   config_slug_overlay, config_runtime_dir, slug_get
+#   - env_get <runtime_dir> <var> - read a Docker-side .env variable
+#   - detect_backend_mode, require_local_backend
+#   - config_backup_binary_dir, config_sql_dump_target, ...
 #
 # Callers should: set -euo pipefail; source "<framework>/bin/lib/config.sh"
 
@@ -88,27 +92,64 @@ path_expand() {
   fi
 }
 
-# Convenience accessors with ~ expansion and required-field checks.
-#
-# config_runtime_dir [instance]
-# Returns the runtime directory for the given instance.
-# - "production" (or no arg): the value from config.yml as-is.
-# - "test": appends "-test" to the production runtime_dir.
-# Test instances live alongside production by convention; no separate
-# config.yml entry is needed.
-config_runtime_dir() {
-  local instance="${1:-production}"
-  local v
-  v="$(config_get '.runtime_dir')"
-  [[ -n "$v" ]] || tal_die "config.yml: runtime_dir is required"
-  local base
-  base="$(path_expand "$v")"
-  case "$instance" in
-    production) echo "$base" ;;
-    test)       echo "${base}-test" ;;
-    *)          tal_die "config_runtime_dir: unknown instance '$instance' (valid: production, test)" ;;
-  esac
+# ---------------------------------------------------------------------------
+# Slug helpers
+# ---------------------------------------------------------------------------
+
+# Read the active slug from ~/.config/task-a-llama/active.
+# Falls back to $TAL_SLUG env var. Errors if neither is set.
+config_active_slug() {
+  if [[ -n "${TAL_SLUG:-}" ]]; then
+    echo "$TAL_SLUG"; return 0
+  fi
+  local f="$HOME/.config/task-a-llama/active"
+  [[ -f "$f" ]] || tal_die "no active environment selected; run bin/mode.sh <slug> or pass a slug argument"
+  local slug
+  slug="$(tr -d '[:space:]' < "$f")"
+  [[ -n "$slug" ]] || tal_die "active file is empty: $f"
+  echo "$slug"
 }
+
+# Resolve a slug arg (or active slug if arg is empty). Validates slug shape.
+config_resolve_slug() {
+  local slug="${1:-}"
+  [[ -z "$slug" ]] && slug="$(config_active_slug)"
+  [[ "$slug" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || tal_die "invalid slug: '$slug' (expected [a-z0-9][a-z0-9_-]*)"
+  echo "$slug"
+}
+
+# Path to the TAL-side env file (URL + token) for a slug.
+config_slug_env() {
+  echo "$HOME/.config/task-a-llama/$1/env"
+}
+
+# Path to the per-slug overlay file (may not exist; caller checks).
+config_slug_overlay() {
+  echo "$HOME/.config/task-a-llama/$1/overlay.yml"
+}
+
+# Path to the local Docker runtime dir for a slug.
+# Always returns the path; caller is responsible for not using when cloud.
+config_runtime_dir() {
+  echo "$HOME/vikunja-$1"
+}
+
+# Read a variable from a slug's TAL-side env file.
+# Returns empty string if the file or variable is absent.
+slug_get() {
+  local slug="$1" var="$2"
+  local f
+  f="$(config_slug_env "$slug")"
+  [[ -f "$f" ]] || return 0
+  grep "^${var}=" "$f" 2>/dev/null \
+    | head -1 \
+    | cut -d= -f2- \
+    | sed -e 's/^"//' -e "s/^'//" -e 's/"$//' -e "s/'$//"
+}
+
+# ---------------------------------------------------------------------------
+# Convenience accessors for config.yml fields (backup, sources)
+# ---------------------------------------------------------------------------
 
 config_backup_binary_dir() {
   local v
@@ -178,28 +219,25 @@ detect_backend_mode() {
   esac
 }
 
-# require_local_backend [instance]
+# require_local_backend [slug]
 # Fail-fast guard for scripts that only make sense against a locally-hosted
-# stack. Reads VIKUNJA_BASE_URL from the instance's .env; if backend is
-# cloud or unknown, prints a tailored message and exits 1.
-# If .env is absent (e.g. first-ever bootstrap), the URL defaults to
+# stack. Reads VIKUNJA_BASE_URL from the slug's TAL-side env file; if backend
+# is cloud or unknown, prints a tailored message and exits 1.
+# If the env file is absent (e.g. first-ever bootstrap), the URL defaults to
 # localhost and the check passes - preserving the bootstrap chicken-and-egg.
 require_local_backend() {
-  local instance="${1:-production}"
-  local runtime_dir
-  runtime_dir="$(config_runtime_dir "$instance")"
+  local slug
+  slug="$(config_resolve_slug "${1:-}")"
   local url
-  url="$(env_get "$runtime_dir" VIKUNJA_BASE_URL)"
+  url="$(slug_get "$slug" VIKUNJA_BASE_URL)"
   url="${url:-http://localhost:3456/api/v1}"
-  local mode
-  mode="$(detect_backend_mode "$url")"
-  case "$mode" in
+  case "$(detect_backend_mode "$url")" in
     local)   return 0 ;;
     cloud)
-      tal_die "$(basename "$0") is a local-stack operation and cannot run against Vikunja Cloud (${url}). Cloud lifecycle is managed by the provider."
+      tal_die "$(basename "$0") is a local-stack operation; slug '${slug}' targets Vikunja Cloud (${url}). Cloud lifecycle is managed by the provider."
       ;;
     unknown)
-      tal_die "$(basename "$0") cannot classify VIKUNJA_BASE_URL='${url}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud). LAN/WAN hosts are not yet supported."
+      tal_die "$(basename "$0") cannot classify VIKUNJA_BASE_URL='${url}' for slug '${slug}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud). LAN/WAN hosts are not yet supported."
       ;;
   esac
 }

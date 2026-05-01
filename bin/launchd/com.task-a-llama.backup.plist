@@ -2,22 +2,15 @@
 <!--
   LaunchAgent template for nightly task-a-llama backups.
 
-  This file is a template. Before installing, replace:
+  This file is a template. install-launchd.sh substitutes:
     __BIN_DIR__      Absolute path to the framework repo's bin/ directory
                      (e.g. /Users/you/code/task-a-llama/bin)
     __LOG_DIR__      Absolute path for log files
                      (e.g. /Users/you/Library/Logs/task-a-llama)
+    __SLUG__         The environment slug to back up (e.g. prod)
 
-  Install:
-    mkdir -p ~/Library/Logs/task-a-llama
-    mkdir -p ~/Library/LaunchAgents
-    cp bin/launchd/com.task-a-llama.backup.plist ~/Library/LaunchAgents/
-    # edit the installed copy to substitute paths, then:
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
-
-  Uninstall:
-    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.task-a-llama.backup.plist
-    rm ~/Library/LaunchAgents/com.task-a-llama.backup.plist
+  Use bin/install-launchd.sh [<slug>] instead of editing and installing
+  this file manually - the script handles substitution and launchctl load.
 
   The default uses --commit (git commit the SQL dump in the data repo) but
   does NOT --push. Enabling --push requires launchd to reach SSH keys, which
@@ -32,6 +25,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>__BIN_DIR__/backup.sh</string>
+    <string>__SLUG__</string>
     <string>--commit</string>
   </array>
 

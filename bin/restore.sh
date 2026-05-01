@@ -2,8 +2,10 @@
 # restore.sh - restore the Vikunja database from a backup.
 #
 # Usage:
-#   restore.sh binary <path-to-tgz>   Restore from a task-a-llama-*.tgz snapshot
-#   restore.sh sql    <path-to-sql>   Restore from a sqlite3 .dump SQL file
+#   restore.sh binary <path-to-tgz> [<slug>]   Restore from a task-a-llama-*.tgz snapshot
+#   restore.sh sql    <path-to-sql>  [<slug>]   Restore from a sqlite3 .dump SQL file
+#
+# Slug defaults to the active slug when omitted.
 #
 # Behaviour:
 #   - Confirms before overwriting the live database.
@@ -14,21 +16,21 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
-require_config
 require_cmd sqlite3
 require_cmd tar
-require_local_backend
 
 if [[ $# -lt 2 ]]; then
-  sed -n '2,13p' "${BASH_SOURCE[0]}"
+  sed -n '2,15p' "${BASH_SOURCE[0]}"
   exit 1
 fi
 
 mode="$1"
 src="$2"
+slug="$(config_resolve_slug "${3:-}")"
 [[ -f "$src" ]] || tal_die "source file not found: ${src}"
 
-runtime_dir="$(config_runtime_dir)"
+require_local_backend "$slug"
+runtime_dir="$(config_runtime_dir "$slug")"
 db_file="${runtime_dir}/db/vikunja.db"
 files_dir="${runtime_dir}/files"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,7 +53,7 @@ fi
 # Bring the stack down so we have exclusive access to the DB file.
 if [[ -f "${runtime_dir}/docker-compose.yml" ]]; then
   tal_log "Stopping stack"
-  "${script_dir}/down.sh"
+  "${script_dir}/down.sh" "$slug"
 fi
 
 case "$mode" in
@@ -87,5 +89,5 @@ case "$mode" in
 esac
 
 tal_log "Starting stack"
-"${script_dir}/up.sh"
+"${script_dir}/up.sh" "$slug"
 tal_log "Restore complete."

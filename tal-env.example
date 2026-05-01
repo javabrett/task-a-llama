@@ -1,0 +1,18 @@
+# TAL environment file — one per slug.
+#
+# Location: ~/.config/task-a-llama/<slug>/env
+# (bootstrap.sh creates this automatically for local-stack slugs)
+#
+# This file carries the API-facing variables used by the /tal skill and the
+# bin/ scripts. It is separate from ~/vikunja-<slug>/.env which holds
+# Docker-only variables (JWT secret, port bindings, container names).
+
+# Base URL for the Vikunja API. Determines which backend is used.
+# Local Docker stack:  http://localhost:<port>/api/v1
+# Vikunja Cloud:       https://app.vikunja.cloud/api/v1
+VIKUNJA_BASE_URL=http://localhost:3456/api/v1
+
+# API token for the /tal skill. Run bin/first-run.sh <slug> to capture it.
+# Create in the Vikunja UI: Settings -> API Tokens -> Create.
+# Scope minimally: projects, tasks, labels (read + write).
+VIKUNJA_API_TOKEN=create_in_vikunja_ui_after_first_login

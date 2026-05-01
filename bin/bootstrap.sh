@@ -1,37 +1,40 @@
 #!/usr/bin/env bash
-# bootstrap.sh - first-run setup for task-a-llama.
+# bootstrap.sh - first-run setup for a task-a-llama environment slug.
 #
 # Idempotent. Safe to re-run; each step is a no-op when already complete.
 #
 # Usage:
-#   bootstrap.sh [production|test] [flags]    # default: production
+#   bootstrap.sh [<slug>] [flags]    # default: active slug
 #
 # What this does:
 #   1. Validates required commands are installed (docker, yq, sqlite3, openssl)
-#   2. Seeds config.yml from config.example.yml if missing (then asks the user to edit and re-run)
-#   3. Creates runtime_dir/{db,files} for the given instance
-#   4. Symlinks docker-compose.yml into runtime_dir
-#   5. Seeds runtime_dir/.env from .env.example if missing (and generates a JWT secret)
-#   6. For test instance: rewrites port/container-name overrides to localhost:4567
-#   7. Reports status of companion repo paths (informational only - bootstrap never clones)
+#   2. Seeds config.yml from config.example.yml if missing (then asks the user
+#      to edit and re-run)
+#   3. Creates ~/vikunja-<slug>/{db,files} for the given slug
+#   4. Symlinks docker-compose.yml into ~/vikunja-<slug>/
+#   5. Seeds ~/vikunja-<slug>/.env from .env.example if missing (Docker-side
+#      vars only: JWT secret, port, container names, TZ)
+#   6. Creates ~/.config/task-a-llama/<slug>/env if missing (TAL-side vars:
+#      VIKUNJA_BASE_URL, VIKUNJA_API_TOKEN placeholder)
+#   7. Reports status of companion repo paths (informational only)
 #   8. Optionally brings the stack up (use --up to skip the interactive prompt)
 
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
-instance="production"
+slug=""
 auto_up=0
 for arg in "$@"; do
   case "$arg" in
-    production|test) instance="$arg" ;;
     --up) auto_up=1 ;;
     --no-up) auto_up=-1 ;;
     -h|--help)
-      sed -n '2,18p' "${BASH_SOURCE[0]}"
+      sed -n '2,19p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
-    *) tal_die "unknown argument: $arg" ;;
+    -*) tal_die "unknown argument: $arg" ;;
+    *)  slug="$arg" ;;
   esac
 done
 
@@ -46,14 +49,16 @@ if [[ ! -f "$TAL_CONFIG" ]]; then
   tal_log "config.yml not found - copying from config.example.yml"
   cp "$TAL_CONFIG_EXAMPLE" "$TAL_CONFIG"
   tal_log ""
-  tal_log "Edit $TAL_CONFIG to match your setup (runtime_dir, source paths, timezone),"
+  tal_log "Edit $TAL_CONFIG to match your setup (source paths, backup config),"
   tal_log "then re-run ./bin/bootstrap.sh"
   exit 0
 fi
 
-runtime_dir="$(config_runtime_dir "$instance")"
-tal_log "runtime_dir resolved to ${runtime_dir} (instance: ${instance})"
-require_local_backend "$instance"
+slug="$(config_resolve_slug "$slug")"
+tal_log "slug: ${slug}"
+require_local_backend "$slug"
+runtime_dir="$(config_runtime_dir "$slug")"
+tal_log "runtime_dir: ${runtime_dir}"
 mkdir -p "${runtime_dir}/db" "${runtime_dir}/files"
 
 # Symlink docker-compose.yml into runtime_dir.
@@ -66,16 +71,30 @@ fi
 ln -sf "$TAL_COMPOSE" "${runtime_dir}/docker-compose.yml"
 tal_log "Symlinked docker-compose.yml into runtime_dir"
 
-# Seed .env if missing.
+# Assign a port for this slug.
+# prod -> 3456 (historical default), test -> 4567, others -> prompt.
+case "$slug" in
+  prod) slug_port=3456 ;;
+  test) slug_port=4567 ;;
+  *)
+    if [[ -t 0 ]]; then
+      read -r -p "[task-a-llama] Port for slug '${slug}' [3000-9999]: " slug_port
+    else
+      tal_die "non-interactive bootstrap for slug '${slug}' requires an explicit port. Re-run from a TTY."
+    fi
+    ;;
+esac
+
+# Seed Docker-side .env if missing.
 env_file="${runtime_dir}/.env"
 fresh_env=0
 if [[ ! -f "$env_file" ]]; then
   fresh_env=1
   tal_log "Creating ${env_file} from .env.example"
   cp "$TAL_ENV_EXAMPLE" "$env_file"
+
   # Generate a JWT secret and replace the placeholder in-place.
   jwt_secret="$(openssl rand -base64 32)"
-  # Use a Python one-liner for safe in-place replacement without sed escaping pitfalls.
   TAL_JWT="$jwt_secret" python3 - "$env_file" <<'PY'
 import os, sys, pathlib
 path = pathlib.Path(sys.argv[1])
@@ -87,33 +106,59 @@ if placeholder in text:
 PY
   tal_log "Generated VIKUNJA_JWT_SECRET in ${env_file}"
 
-  # For the test instance, rewrite production defaults to test-specific values.
-  if [[ "$instance" == "test" ]]; then
-    TAL_INSTANCE="test" python3 - "$env_file" <<'PY'
-import re, sys, pathlib
+  # Detect host timezone and populate TZ + VIKUNJA_SERVICE_TIMEZONE.
+  detected_tz="$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')"
+  [[ -z "$detected_tz" ]] && detected_tz="UTC"
+  TAL_TZ="$detected_tz" python3 - "$env_file" <<'PY'
+import re, os, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+tz = os.environ["TAL_TZ"]
+text = path.read_text()
+for key in ("TZ", "VIKUNJA_SERVICE_TIMEZONE"):
+    text = re.sub(r'^' + key + r'=$', key + '=' + tz, text, flags=re.MULTILINE)
+path.write_text(text)
+PY
+  tal_log "Set TZ and VIKUNJA_SERVICE_TIMEZONE to ${detected_tz} in ${env_file}"
+
+  # Rewrite slug-specific Docker vars (port, container names, public URL).
+  TAL_SLUG_NAME="$slug" TAL_PORT="$slug_port" python3 - "$env_file" <<'PY'
+import re, os, sys, pathlib
+slug = os.environ["TAL_SLUG_NAME"]
+port = os.environ["TAL_PORT"]
 path = pathlib.Path(sys.argv[1])
 text = path.read_text()
-
 replacements = {
-    r'^VIKUNJA_SERVICE_PUBLICURL=.*$': 'VIKUNJA_SERVICE_PUBLICURL=http://localhost:4567/',
-    r'^VIKUNJA_PORT=.*$':              'VIKUNJA_PORT=4567',
-    r'^VIKUNJA_CONTAINER_NAME=.*$':    'VIKUNJA_CONTAINER_NAME=vikunja-test',
-    r'^VIKUNJA_WATCHTOWER_NAME=.*$':   'VIKUNJA_WATCHTOWER_NAME=task-a-llama-watchtower-test',
-    r'^VIKUNJA_BASE_URL=.*$':          'VIKUNJA_BASE_URL=http://localhost:4567/api/v1',
+    r'^VIKUNJA_SERVICE_PUBLICURL=.*$': f'VIKUNJA_SERVICE_PUBLICURL=http://localhost:{port}/',
+    r'^VIKUNJA_PORT=.*$':              f'VIKUNJA_PORT={port}',
+    r'^VIKUNJA_CONTAINER_NAME=.*$':    f'VIKUNJA_CONTAINER_NAME=vikunja-{slug}',
+    r'^VIKUNJA_WATCHTOWER_NAME=.*$':   f'VIKUNJA_WATCHTOWER_NAME=task-a-llama-watchtower-{slug}',
 }
 for pattern, replacement in replacements.items():
     text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
 path.write_text(text)
 PY
-    tal_log "Rewrote test-instance overrides in ${env_file} (port 4567, container vikunja-test)"
-  fi
+  tal_log "Configured Docker .env for slug '${slug}' (port ${slug_port})"
 
   tal_log ""
   tal_log "Review ${env_file} and confirm:"
-  tal_log "  - TZ is correct (currently: $(grep '^TZ=' "$env_file" | cut -d= -f2-))"
-  tal_log "  - VIKUNJA_API_TOKEN left as placeholder; run ./bin/first-run.sh ${instance} to capture it"
+  tal_log "  - TZ and VIKUNJA_SERVICE_TIMEZONE are correct (currently: $(grep '^TZ=' "$env_file" | cut -d= -f2-))"
 else
-  tal_log ".env already exists at ${env_file}, leaving as-is"
+  tal_log "Docker .env already exists at ${env_file}, leaving as-is"
+fi
+
+# Seed TAL-side env file if missing.
+tal_env_dir="$HOME/.config/task-a-llama/${slug}"
+tal_env_file="${tal_env_dir}/env"
+if [[ ! -f "$tal_env_file" ]]; then
+  mkdir -p "$tal_env_dir"
+  cat > "$tal_env_file" <<TALENV
+VIKUNJA_BASE_URL=http://localhost:${slug_port}/api/v1
+VIKUNJA_API_TOKEN=create_in_vikunja_ui_after_first_login
+TALENV
+  tal_log "Created TAL env at ${tal_env_file}"
+  tal_log "  - Run ./bin/first-run.sh ${slug} to capture the API token"
+else
+  tal_log "TAL env already exists at ${tal_env_file}, leaving as-is"
 fi
 
 # Report companion repo paths. Bootstrap never clones or creates these --
@@ -159,22 +204,22 @@ fi
 if [[ "$do_up" == "1" ]]; then
   bin_dir="$(dirname "${BASH_SOURCE[0]}")"
 
-  # Resolve instance-specific URL/container values for the up + ready check.
+  # Resolve slug-specific URL/container values for the up + ready check.
   port="$(grep '^VIKUNJA_PORT=' "$env_file" | cut -d= -f2-)"
-  port="${port:-3456}"
+  port="${port:-${slug_port}}"
   web_base="http://localhost:${port}"
   api_base="${web_base}/api/v1"
   container_name="$(grep '^VIKUNJA_CONTAINER_NAME=' "$env_file" | cut -d= -f2-)"
-  container_name="${container_name:-vikunja}"
+  container_name="${container_name:-vikunja-${slug}}"
 
   if [[ "$fresh_env" == "1" ]]; then
     # First-run: create the initial account via the Vikunja CLI running inside
     # the container. This bypasses VIKUNJA_SERVICE_ENABLEREGISTRATION entirely --
     # registration stays disabled throughout; no toggle required.
-    "$bin_dir/up.sh" "$instance"
+    "$bin_dir/up.sh" "$slug"
 
     tal_log ""
-    tal_log "Waiting for Vikunja (${instance}) to be ready..."
+    tal_log "Waiting for Vikunja (${slug}) to be ready..."
     ready=0
     for i in $(seq 1 30); do
       if curl -sf "${api_base}/info" >/dev/null 2>&1; then
@@ -208,6 +253,6 @@ if [[ "$do_up" == "1" ]]; then
       tal_warn "Log in at ${web_base} with your existing credentials."
     fi
   else
-    exec "$bin_dir/up.sh" "$instance"
+    exec "$bin_dir/up.sh" "$slug"
   fi
 fi

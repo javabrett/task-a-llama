@@ -33,8 +33,12 @@ services:
       # CORS disabled - frontend & API share the same origin on localhost
       VIKUNJA_CORS_ENABLE: "false"
 
-      # Timezone - affects reminder delivery & timestamps
+      # Timezone - both must be set and kept in sync.
+      # TZ sets the OS/process timezone (Go time.Local, log timestamps).
+      # VIKUNJA_SERVICE_TIMEZONE is what Vikunja's app layer actually uses
+      # for reminder delivery and the user timezone fallback.
       TZ: "${TZ}"
+      VIKUNJA_SERVICE_TIMEZONE: "${VIKUNJA_SERVICE_TIMEZONE}"
 
     volumes:
       - ./db:/db                      # SQLite file lives here - the only thing that matters for backup

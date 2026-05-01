@@ -114,14 +114,13 @@ tal-unaware, no `.task-a-llama/` directory, no pointer file.
 
 ### Why server-side
 
-Two stacks (production, test) run with independent databases, so
-numeric Vikunja IDs cannot be carried between them. Storing the
-binding inside the Vikunja project entity makes it naturally
-environment-scoped (each stack has its own copy of the binding) and
-removes the duplicate-state problem that a local pointer file would
-introduce. It also keeps the framework aligned with the API-only
-access rule (see CLAUDE.md): no host-disk dependencies, portable to
-managed/remote Vikunja in the future.
+Each slug has its own isolated Vikunja database, so numeric IDs from one
+slug cannot be carried to another. Storing the binding inside the Vikunja
+project entity makes it naturally environment-scoped (each slug has its
+own copy of the binding) and removes the duplicate-state problem that a
+local pointer file would introduce. It also keeps the framework aligned
+with the API-only access rule (see CLAUDE.md): no host-disk dependencies,
+portable to managed/remote Vikunja in the future.
 
 ### The tal-meta block
 
@@ -251,7 +250,7 @@ specifies one ("follow up by Friday", "before the 15th").
 
 When parsing date phrases:
 
-- Relative dates resolve against the user's `TZ` from `.env`.
+- Relative dates resolve against the user's system timezone (`date +%Z`).
 - Ambiguous dates ("Friday") prefer the next future occurrence.
 - If parsing fails, ask rather than guess.
 
