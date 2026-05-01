@@ -13,6 +13,7 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
+require_local_backend
 
 mode="install"
 for arg in "$@"; do

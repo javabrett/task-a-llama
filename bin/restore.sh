@@ -17,6 +17,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 require_config
 require_cmd sqlite3
 require_cmd tar
+require_local_backend
 
 if [[ $# -lt 2 ]]; then
   sed -n '2,13p' "${BASH_SOURCE[0]}"

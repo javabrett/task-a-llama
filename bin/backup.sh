@@ -46,6 +46,24 @@ for arg in "$@"; do
 done
 
 runtime_dir="$(config_runtime_dir "$instance")"
+
+_base_url="$(env_get "$runtime_dir" VIKUNJA_BASE_URL)"
+_base_url="${_base_url:-http://localhost:3456/api/v1}"
+case "$(detect_backend_mode "$_base_url")" in
+  cloud)
+    tal_log "Cloud mode: Vikunja Cloud manages durability and backups for your account."
+    tal_log "To export your own data on demand:"
+    tal_log "  - In the UI: Settings -> Export -> Request data export"
+    tal_log "  - As a manual script: bin/cloud-export.sh (not yet implemented;"
+    tal_log "    deferred because the export endpoint requires interactive password confirmation)"
+    tal_log "Skipping local backup."
+    exit 0
+    ;;
+  unknown)
+    tal_die "Cannot classify VIKUNJA_BASE_URL='${_base_url}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud)."
+    ;;
+esac
+
 db_file="${runtime_dir}/db/vikunja.db"
 files_dir="${runtime_dir}/files"
 binary_dir="$(config_backup_binary_dir)"

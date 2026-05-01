@@ -53,6 +53,7 @@ fi
 
 runtime_dir="$(config_runtime_dir "$instance")"
 tal_log "runtime_dir resolved to ${runtime_dir} (instance: ${instance})"
+require_local_backend "$instance"
 mkdir -p "${runtime_dir}/db" "${runtime_dir}/files"
 
 # Symlink docker-compose.yml into runtime_dir.

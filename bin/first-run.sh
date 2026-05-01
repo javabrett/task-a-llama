@@ -29,11 +29,26 @@ runtime_dir="$(config_runtime_dir "$instance")"
 env_file="${runtime_dir}/.env"
 [[ -f "$env_file" ]] || tal_die ".env not found at ${env_file}. Run ./bin/bootstrap.sh ${instance} first."
 
-# Resolve port from the env file so we open the right UI.
-port="$(grep '^VIKUNJA_PORT=' "$env_file" | cut -d= -f2- || true)"
-port="${port:-3456}"
-web_base="http://localhost:${port}"
-api_base="${web_base}/api/v1"
+# Detect backend mode from VIKUNJA_BASE_URL to set the right UI/API endpoints.
+_base_url="$(env_get "$runtime_dir" VIKUNJA_BASE_URL)"
+_base_url="${_base_url:-http://localhost:3456/api/v1}"
+_backend_mode="$(detect_backend_mode "$_base_url")"
+
+case "$_backend_mode" in
+  cloud)
+    web_base="https://app.vikunja.cloud"
+    api_base="${web_base}/api/v1"
+    ;;
+  local)
+    port="$(env_get "$runtime_dir" VIKUNJA_PORT)"
+    port="${port:-3456}"
+    web_base="http://localhost:${port}"
+    api_base="${web_base}/api/v1"
+    ;;
+  unknown)
+    tal_die "Cannot classify VIKUNJA_BASE_URL='${_base_url}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud)."
+    ;;
+esac
 
 placeholder="create_in_vikunja_ui_after_first_login"
 token_re='^tk_[0-9a-f]{40,}$'
@@ -46,7 +61,10 @@ fi
 
 tal_log "Confirming Vikunja (${instance}) is reachable on ${web_base}..."
 if ! curl -sf "${api_base}/info" >/dev/null 2>&1; then
-  tal_die "Vikunja is not responding. Run ./bin/up.sh ${instance} first."
+  case "$_backend_mode" in
+    cloud) tal_die "Vikunja Cloud is not responding at ${api_base}. Check your network connection." ;;
+    *)     tal_die "Vikunja is not responding. Run ./bin/up.sh ${instance} first." ;;
+  esac
 fi
 
 tal_log ""

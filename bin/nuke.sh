@@ -36,6 +36,7 @@ for arg in "$@"; do
   esac
 done
 
+require_local_backend "$instance"
 runtime_dir="$(config_runtime_dir "$instance")"
 [[ -d "$runtime_dir" ]] || tal_die "runtime_dir does not exist: ${runtime_dir}"
 

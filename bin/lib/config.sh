@@ -151,3 +151,55 @@ config_data_repo_local() {
   v="$(config_get '.sources.data.local')"
   [[ -n "$v" ]] && path_expand "$v" || echo ""
 }
+
+# env_get <runtime_dir> <var>
+# Read one VAR=value line from a runtime instance's .env file.
+# Strips surrounding single/double quotes. Returns empty string if the
+# file is absent or the variable is not present.
+env_get() {
+  local runtime_dir="$1" var="$2"
+  local env_file="${runtime_dir}/.env"
+  [ -f "$env_file" ] || return 0
+  grep "^${var}=" "$env_file" 2>/dev/null \
+    | head -1 \
+    | cut -d= -f2- \
+    | sed -e 's/^"//' -e "s/^'//" -e 's/"$//' -e "s/'$//"
+}
+
+# detect_backend_mode <url>
+# Classify a VIKUNJA_BASE_URL value by hostname.
+# Echoes one of: local | cloud | unknown
+detect_backend_mode() {
+  local url="$1"
+  case "$url" in
+    *vikunja.cloud*)          echo cloud ;;
+    *://localhost[:/]*|*://127.0.0.1[:/]*) echo local ;;
+    *)                        echo unknown ;;
+  esac
+}
+
+# require_local_backend [instance]
+# Fail-fast guard for scripts that only make sense against a locally-hosted
+# stack. Reads VIKUNJA_BASE_URL from the instance's .env; if backend is
+# cloud or unknown, prints a tailored message and exits 1.
+# If .env is absent (e.g. first-ever bootstrap), the URL defaults to
+# localhost and the check passes - preserving the bootstrap chicken-and-egg.
+require_local_backend() {
+  local instance="${1:-production}"
+  local runtime_dir
+  runtime_dir="$(config_runtime_dir "$instance")"
+  local url
+  url="$(env_get "$runtime_dir" VIKUNJA_BASE_URL)"
+  url="${url:-http://localhost:3456/api/v1}"
+  local mode
+  mode="$(detect_backend_mode "$url")"
+  case "$mode" in
+    local)   return 0 ;;
+    cloud)
+      tal_die "$(basename "$0") is a local-stack operation and cannot run against Vikunja Cloud (${url}). Cloud lifecycle is managed by the provider."
+      ;;
+    unknown)
+      tal_die "$(basename "$0") cannot classify VIKUNJA_BASE_URL='${url}'. Supported: localhost / 127.0.0.1 (local) or *.vikunja.cloud (Cloud). LAN/WAN hosts are not yet supported."
+      ;;
+  esac
+}
