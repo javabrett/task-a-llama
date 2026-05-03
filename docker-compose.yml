@@ -61,5 +61,9 @@ services:
       - "86400"         # once per day
     environment:
       TZ: "${TZ}"
+      # OrbStack and recent Docker Desktop enforce a minimum Docker API version
+      # of 1.40. Watchtower 1.7.x negotiates down to 1.25 by default, which
+      # is rejected. Pin to 1.45 (Docker 24.x) to satisfy the minimum.
+      DOCKER_API_VERSION: "1.45"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
