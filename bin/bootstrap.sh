@@ -256,6 +256,7 @@ if [[ "$do_up" == "1" ]]; then
       tal_log ""
       tal_log "================================================================"
       tal_log "  Initial account created - save these in your password manager"
+      tal_log "  Slug:     ${slug}"
       tal_log "  URL:      ${web_base}"
       tal_log "  Username: ${init_user}"
       tal_log "  Password: ${init_pass}"
