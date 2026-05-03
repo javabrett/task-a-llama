@@ -66,6 +66,40 @@ favours transparency and portability for this use case.
 
 ---
 
+## VIKUNJA_ variable naming and apparent duplication
+
+Three variables cover similar ground:
+
+- `VIKUNJA_SERVICE_PUBLICURL` (`http://localhost:3456/`) - Docker `.env`
+- `VIKUNJA_BASE_URL` (`http://localhost:3456/api/v1`) - TAL env
+- `VIKUNJA_PORT` (`3456`) - Docker `.env`
+
+They exist for different reasons and the duplication is largely forced:
+
+**`VIKUNJA_SERVICE_PUBLICURL`** is Vikunja's own config key - the app needs
+its externally-visible address for email links and API self-references. The
+name ("PUBLIC") is from Vikunja's perspective: the address it's reachable at
+from outside the container. We cannot rename or drop it.
+
+**`VIKUNJA_BASE_URL`** is a TAL-side variable (in `~/.config/task-a-llama/<slug>/env`).
+The skill and scripts need an API root that works for both local and Cloud
+slugs. It must live in the TAL env because Cloud slugs have no Docker env.
+The `/api/v1` path suffix is fixed — Vikunja has used it since v1 and v2.x
+of the app still does (the path version is the API version, not the app version).
+
+**`VIKUNJA_PORT`** exists because Docker Compose needs a bare integer for port
+binding interpolation (`127.0.0.1:${VIKUNJA_PORT}:3456`) and cannot extract a
+port number from a URL string.
+
+**One deferred simplification:** `VIKUNJA_SERVICE_PUBLICURL` is fully derivable
+from `VIKUNJA_PORT` and could be set inside `docker-compose.yml` directly
+(`VIKUNJA_SERVICE_PUBLICURL: "http://localhost:${VIKUNJA_PORT}/"`) rather than
+carried as a user-configurable key in `.env`. This would reduce the configurable
+surface by one variable. Left for later as the current setup works and the
+redundancy is low-risk.
+
+---
+
 ## Why Four Repos (rather than one)
 
 The project splits across `task-a-llama` (framework), `task-a-llama-skills`
