@@ -76,13 +76,16 @@ tal_log ""
 
 token=""
 while [[ -z "$token" ]]; do
-  read -r -p "Paste the tk_... token (or 'q' to abort): " token
+  read -r -s -p "Paste the tk_... token (or 'q' to abort): " token
+  echo
   if [[ "$token" == "q" ]]; then
     tal_die "Aborted. Re-run when you have a token."
   fi
   if ! [[ "$token" =~ $token_re ]]; then
     tal_warn "That doesn't look like a Vikunja API token (expected: tk_<hex>, 40+ chars)."
     token=""
+  else
+    tal_log "Received: tk_${token:3:6}..."
   fi
 done
 
