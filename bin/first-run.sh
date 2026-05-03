@@ -55,7 +55,7 @@ if [[ -n "$current" && "$current" != "$placeholder" && "$current" =~ $token_re ]
   exit 0
 fi
 
-tal_log "Confirming Vikunja (${instance}) is reachable on ${web_base}..."
+tal_log "Confirming Vikunja (${slug}) is reachable on ${web_base}..."
 if ! curl -sf "${api_base}/info" >/dev/null 2>&1; then
   case "$_backend_mode" in
     cloud) tal_die "Vikunja Cloud is not responding at ${api_base}. Check your network connection." ;;
