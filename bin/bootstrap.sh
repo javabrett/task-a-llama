@@ -185,6 +185,18 @@ tal_log ""
 tal_log "Bootstrap complete."
 tal_log "Runtime: ${runtime_dir}"
 
+# Set the active slug if none is set yet; otherwise leave it alone.
+active_file="$HOME/.config/task-a-llama/active"
+if [[ ! -f "$active_file" ]]; then
+  echo "$slug" > "$active_file"
+  tal_log "Set active slug to '${slug}'."
+else
+  current_active="$(tr -d '[:space:]' < "$active_file")"
+  if [[ "$current_active" != "$slug" ]]; then
+    tal_log "Active slug unchanged ('${current_active}'). Run ./bin/mode.sh ${slug} to switch."
+  fi
+fi
+
 # Decide whether to bring the stack up.
 if [[ "$auto_up" == "1" ]]; then
   do_up=1
