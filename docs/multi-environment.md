@@ -45,12 +45,8 @@ Cloud slugs have no local Docker runtime - the TAL-side env file is the
 only artefact.
 
 ```bash
-mkdir -p ~/.config/task-a-llama/cloud1
-
-cat > ~/.config/task-a-llama/cloud1/env <<'EOF'
-VIKUNJA_BASE_URL=https://app.vikunja.cloud/api/v1
-VIKUNJA_API_TOKEN=create_in_vikunja_ui_after_first_login
-EOF
+# Bootstrap creates ~/.config/task-a-llama/cloud1/env with the Cloud URL pre-filled.
+./bin/bootstrap.sh --cloud cloud1
 
 # Capture the token (opens the Cloud API tokens UI).
 ./bin/first-run.sh cloud1

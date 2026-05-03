@@ -4,9 +4,17 @@
 # Idempotent. Safe to re-run; each step is a no-op when already complete.
 #
 # Usage:
-#   bootstrap.sh [<slug>] [flags]    # default: active slug
+#   bootstrap.sh [<slug>] [flags]         # default: active slug
+#   bootstrap.sh --cloud [<slug>]         # Vikunja Cloud slug (no Docker)
 #
-# What this does:
+# Flags:
+#   --cloud    Set up a Vikunja Cloud slug. Creates the TAL env file with
+#              the Cloud API URL pre-filled. No Docker required. After
+#              running, capture your token with: ./bin/first-run.sh <slug>
+#   --up       Bring the local stack up after bootstrap (local slugs only).
+#   --no-up    Skip the "bring stack up?" prompt.
+#
+# What this does (local slugs):
 #   1. Validates required commands are installed (docker, yq, sqlite3, openssl)
 #   2. Seeds config.yml from config.example.yml if missing (then asks the user
 #      to edit and re-run)
@@ -25,18 +33,58 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
 
 slug=""
 auto_up=0
+cloud_mode=0
 for arg in "$@"; do
   case "$arg" in
+    --cloud) cloud_mode=1 ;;
     --up) auto_up=1 ;;
     --no-up) auto_up=-1 ;;
     -h|--help)
-      sed -n '2,19p' "${BASH_SOURCE[0]}"
+      sed -n '2,30p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     -*) tal_die "unknown argument: $arg" ;;
     *)  slug="$arg" ;;
   esac
 done
+
+# Cloud slug path: no Docker, no local runtime. Just the TAL env file.
+if [[ "$cloud_mode" == "1" ]]; then
+  slug="$(config_resolve_slug "$slug")"
+  cloud_url="https://app.vikunja.cloud/api/v1"
+  tal_env_dir="$HOME/.config/task-a-llama/${slug}"
+  tal_env_file="${tal_env_dir}/env"
+
+  if [[ -f "$tal_env_file" ]]; then
+    existing_url="$(grep '^VIKUNJA_BASE_URL=' "$tal_env_file" | cut -d= -f2-)"
+    if [[ "$existing_url" == *"vikunja.cloud"* ]]; then
+      tal_log "Cloud TAL env already exists at ${tal_env_file}, leaving as-is."
+    else
+      tal_die "TAL env at ${tal_env_file} already exists with a non-Cloud URL (${existing_url}). Remove it and re-run to reconfigure."
+    fi
+  else
+    mkdir -p "$tal_env_dir"
+    printf 'VIKUNJA_BASE_URL=%s\nVIKUNJA_API_TOKEN=create_in_vikunja_ui_after_first_login\n' \
+      "$cloud_url" > "$tal_env_file"
+    tal_log "Created Cloud TAL env at ${tal_env_file}"
+  fi
+
+  active_file="$HOME/.config/task-a-llama/active"
+  if [[ ! -f "$active_file" ]]; then
+    echo "$slug" > "$active_file"
+    tal_log "Set active slug to '${slug}'."
+  else
+    current_active="$(tr -d '[:space:]' < "$active_file")"
+    if [[ "$current_active" != "$slug" ]]; then
+      tal_log "Active slug unchanged ('${current_active}'). Run ./bin/mode.sh ${slug} to switch."
+    fi
+  fi
+
+  tal_log ""
+  tal_log "Cloud slug '${slug}' ready."
+  tal_log "Next step: ./bin/first-run.sh ${slug}"
+  exit 0
+fi
 
 tal_log "Validating prerequisites..."
 require_cmd docker "install Docker Desktop, OrbStack, or Colima"
