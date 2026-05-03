@@ -131,7 +131,6 @@ replacements = {
     r'^VIKUNJA_SERVICE_PUBLICURL=.*$': f'VIKUNJA_SERVICE_PUBLICURL=http://localhost:{port}/',
     r'^VIKUNJA_PORT=.*$':              f'VIKUNJA_PORT={port}',
     r'^VIKUNJA_CONTAINER_NAME=.*$':    f'VIKUNJA_CONTAINER_NAME=vikunja-{slug}',
-    r'^VIKUNJA_WATCHTOWER_NAME=.*$':   f'VIKUNJA_WATCHTOWER_NAME=task-a-llama-watchtower-{slug}',
 }
 for pattern, replacement in replacements.items():
     text = re.sub(pattern, replacement, text, flags=re.MULTILINE)

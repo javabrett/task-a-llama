@@ -35,7 +35,7 @@ open http://localhost:4567
 Both slugs run concurrently. Verify:
 
 ```bash
-docker ps --filter "label=com.centurylinklabs.watchtower.enable=true"
+docker ps --filter "name=vikunja-"
 # vikunja-prod (port 3456), vikunja-test (port 4567)
 ```
 
@@ -134,6 +134,6 @@ own database. User repos remain tal-unaware.
 
 ```bash
 ./bin/mode.sh                                         # current /tal target
-docker ps --format 'table {{.Names}}\t{{.Ports}}'    # what is running
+docker ps --filter "name=vikunja-" --format 'table {{.Names}}\t{{.Ports}}'  # what is running
 ls ~/.config/task-a-llama/                           # configured slugs
 ```

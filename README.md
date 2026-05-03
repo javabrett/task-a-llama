@@ -18,7 +18,7 @@ It's designed for people who want Asana-style lightweight task management with t
 
 ## Highlights
 
-- **Single-container Vikunja** with SQLite backend, running on localhost via Docker (or OrbStack, or Colima — the runtime doesn't matter)
+- **Single-container Vikunja** with SQLite backend, running on localhost via Docker (or OrbStack, or Colima - the runtime doesn't matter)
 - **Claude Code skills** for common operations: capture TODOs from a session into Vikunja, sync Linear issues, daily reviews, backup/restore
 - **Minimal bind-mount footprint** — one SQLite file plus an attachments directory, nothing else persistent
 - **GitOps-style backup** — binary snapshots for point-in-time restore, SQL dumps committed to a private data repo for diffable history
@@ -37,10 +37,10 @@ It's designed for people who want Asana-style lightweight task management with t
 │  ┌──────────────────────────────────────────────────┐       │
 │  │ Docker Runtime (Docker Desktop / OrbStack)       │       │
 │  │                                                  │       │
-│  │  ┌─────────────────┐      ┌──────────────────┐   │       │
-│  │  │ Vikunja         │      │ Watchtower       │   │       │
-│  │  │ :3456           │      │ (monitor-only)   │   │       │
-│  │  └────────┬────────┘      └──────────────────┘   │       │
+│  │  ┌─────────────────┐                             │       │
+│  │  │ Vikunja         │                             │       │
+│  │  │ :3456           │                             │       │
+│  │  └────────┬────────┘                             │       │
 │  └───────────┼──────────────────────────────────────┘       │
 │              │                                              │
 │              │ bind mounts                                  │
@@ -105,7 +105,6 @@ The skills encapsulate how to do these reliably — with dry-run defaults on des
 ## Runtime Footprint
 
 - **Vikunja**: ~30-50 MB RAM idle, negligible CPU
-- **Watchtower**: ~10 MB RAM
 - **Total disk**: SQLite file stays under 10 MB for personal use indefinitely; attachments directory depends on usage (typically empty for TODO-style workflows)
 - **Network**: localhost only by default; no public exposure unless intentionally configured
 - **Boot time**: seconds, via `docker compose up -d`
@@ -211,7 +210,7 @@ If you later choose to expose Vikunja beyond localhost (Tailscale, reverse proxy
 ## Roadmap
 
 v1.0 (current):
-- Vikunja + Watchtower compose stack
+- Vikunja compose stack
 - Bootstrap / backup / restore scripts
 - Claude Code adapter with core skills (capture, review, backup)
 - Public knowledge base for Vikunja API

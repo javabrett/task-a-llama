@@ -175,11 +175,21 @@ Compose file uses `vikunja/vikunja:2.3` rather than `:latest` or `:2.3.0`.
 - `:2.3` gets patch updates (2.3.0 -> 2.3.1 -> ...) but never jumps to 2.4
 
 Vikunja's Docker Hub tags use no `v` prefix (e.g. `2.3`, `2.3.0`), unlike
-some other projects. Watchtower uses the same un-prefixed convention.
+some other projects. Upgrades are applied deliberately by bumping the version
+in `docker-compose.yml` after reading the release notes.
 
-Watchtower runs in monitor-only mode — it notifies of available updates
-without applying them, letting us read release notes before upgrading minors
-or majors deliberately.
+## No image update monitor (Watchtower removed)
+
+Watchtower was originally included in monitor-only mode to notify of new
+images. It was removed because the project is effectively abandoned: the
+bundled Docker client library is pinned to API v1.25, and Docker Engine 29+
+raised the minimum to 1.44, causing Watchtower to fail permanently on every
+check cycle with no upstream fix in sight.
+
+If image update monitoring is wanted in future, **Diun** (`crazy-max/diun`)
+is the actively maintained alternative. It is notification-only by design,
+lightweight, and supports the current Docker API. See
+https://github.com/crazy-max/diun.
 
 ---
 
