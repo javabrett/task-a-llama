@@ -121,7 +121,10 @@ a slug-scoped path:
 
 - `~/.config/task-a-llama/<slug>/env` - URL + token
 - `~/vikunja-<slug>/.env` - Docker-side secrets (local stacks only)
-- `~/.config/task-a-llama/<slug>/overlay.yml` - per-slug overlay
+
+The overlay (`~/.config/task-a-llama/overlay.yml`) is global and shared
+across all slugs. Your customer vocabulary, project aliases, and conventions
+don't change just because you're pointing at a different Vikunja instance.
 
 Project bindings live inside Vikunja project descriptions (the `tal-meta`
 block), which are naturally environment-scoped because each slug has its

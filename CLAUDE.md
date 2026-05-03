@@ -216,8 +216,8 @@ After a `/clear` or in a fresh session, the stowed files at
 - `~/.claude/skills/tal/references/*.md` -- detailed operation specs
 
 The overlay config (user-specific label vocabulary, project aliases,
-conventions) lives at `~/.config/task-a-llama/<slug>/overlay.yml` (per-slug)
-with a fallback to `~/.config/task-a-llama/overlay.yml` (global legacy).
+conventions) lives at `~/.config/task-a-llama/overlay.yml` (global, shared
+across all slugs).
 
 ## Source references
 

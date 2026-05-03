@@ -8,7 +8,7 @@
 #   - config_get <yq-path> - read a value from config.yml
 #   - path_expand <path> - expand leading ~ without invoking eval
 #   - Slug helpers: config_active_slug, config_resolve_slug, config_slug_env,
-#                   config_slug_overlay, config_runtime_dir, slug_get
+#                   config_runtime_dir, slug_get
 #   - env_get <runtime_dir> <var> - read a Docker-side .env variable
 #   - detect_backend_mode, require_local_backend
 #   - config_backup_binary_dir, config_sql_dump_target, ...
@@ -121,11 +121,6 @@ config_resolve_slug() {
 # Path to the TAL-side env file (URL + token) for a slug.
 config_slug_env() {
   echo "$HOME/.config/task-a-llama/$1/env"
-}
-
-# Path to the per-slug overlay file (may not exist; caller checks).
-config_slug_overlay() {
-  echo "$HOME/.config/task-a-llama/$1/overlay.yml"
 }
 
 # Path to the local Docker runtime dir for a slug.

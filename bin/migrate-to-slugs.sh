@@ -11,9 +11,7 @@
 #   4. Splits each .env: extracts VIKUNJA_BASE_URL and VIKUNJA_API_TOKEN
 #      into ~/.config/task-a-llama/<slug>/env; removes those lines from
 #      ~/vikunja-<slug>/.env.
-#   5. Copies any global overlay to each per-slug dir (leaves global in place
-#      as deprecated fallback).
-#   6. Migrates ~/.config/task-a-llama/active-mode to active.
+#   5. Migrates ~/.config/task-a-llama/active-mode to active.
 #
 # Usage:
 #   ./bin/migrate-to-slugs.sh
@@ -61,7 +59,6 @@ tal_log "Planned changes:"
 [[ -d "${HOME}/vikunja-test" ]] && tal_log "  ~/vikunja-test/ stays (slug: test)"
 [[ -n "$prod_slug" ]] && tal_log "  extract VIKUNJA_BASE_URL + VIKUNJA_API_TOKEN from ~/vikunja-${prod_slug}/.env -> ~/.config/task-a-llama/${prod_slug}/env"
 [[ -d "${HOME}/vikunja-test" ]] && tal_log "  extract VIKUNJA_BASE_URL + VIKUNJA_API_TOKEN from ~/vikunja-test/.env -> ~/.config/task-a-llama/test/env"
-[[ -f "${TAL_CONF_DIR}/overlay.yml" ]] && tal_log "  copy ~/.config/task-a-llama/overlay.yml to each per-slug dir (global left as fallback)"
 [[ -f "${TAL_CONF_DIR}/active-mode" ]] && tal_log "  rename active-mode -> active"
 tal_log ""
 
@@ -132,22 +129,6 @@ fi
 if [[ -d "${HOME}/vikunja-test" ]]; then
   tal_log "Splitting .env for slug 'test'..."
   split_env "test"
-fi
-
-# ---------------------------------------------------------------------------
-# Copy global overlay to per-slug dirs (leave global as deprecated fallback)
-# ---------------------------------------------------------------------------
-if [[ -f "${TAL_CONF_DIR}/overlay.yml" ]]; then
-  for s in "${prod_slug:-}" test; do
-    [[ -z "$s" ]] && continue
-    slug_dir="${TAL_CONF_DIR}/${s}"
-    [[ -d "$slug_dir" ]] || continue
-    if [[ ! -f "${slug_dir}/overlay.yml" ]]; then
-      cp "${TAL_CONF_DIR}/overlay.yml" "${slug_dir}/overlay.yml"
-      tal_log "Copied overlay to ${slug_dir}/overlay.yml"
-    fi
-  done
-  tal_log "(Global overlay.yml left in place as deprecated fallback)"
 fi
 
 # ---------------------------------------------------------------------------
