@@ -104,8 +104,9 @@ compose symlink. The prod slug is untouched.
 
 ## What is NOT split between slugs
 
-- **Companion repos**: `task-a-llama-skills`, `task-a-llama-overlay`, and
-  the data repo are shared - skills are global to the Claude Code session.
+- **Companion repos**: `task-a-llama-skills`, the private overlay package
+  (`mac-setup/dotfiles/task-a-llama`), and the data repo are shared -
+  skills are global to the Claude Code session.
 - **Active file**: `~/.config/task-a-llama/active` is global - it is the
   selector, so it has to be unscoped.
 

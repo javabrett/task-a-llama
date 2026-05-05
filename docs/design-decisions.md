@@ -103,8 +103,8 @@ redundancy is low-risk.
 ## Why Four Repos (rather than one)
 
 The project splits across `task-a-llama` (framework), `task-a-llama-skills`
-(public skills), `task-a-llama-overlay` (private skills), and
-`task-a-llama-pasture` (data).
+(public skills), a private overlay package (`mac-setup/dotfiles/task-a-llama`),
+and `task-a-llama-pasture` (data).
 
 Each has a distinct:
 

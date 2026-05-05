@@ -38,7 +38,7 @@ are absent.
 | Repo | Purpose | Required for |
 | --- | --- | --- |
 | `task-a-llama-skills` | Public skills repo -- the `/tal` Claude Code skill | Skill usage |
-| `task-a-llama-overlay` | Private skills overlay, managed by your mac-setup dotfiles | Custom conventions |
+| `mac-setup/dotfiles/task-a-llama` | Private overlay package (overlay.yml and future private skills), stowed from your dotfiles repo | Custom conventions |
 | `task-a-llama-pasture` | SQL dump history -- committed by `backup.sh --commit` | Backup `--commit`/`--push` flags |
 
 Bootstrap will clone `task-a-llama-skills` automatically once it exists. The

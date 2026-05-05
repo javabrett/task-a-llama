@@ -72,14 +72,14 @@ Multiple named environments (slugs) can coexist — a local `prod` stack and a `
 | ---------------------------- | ---------------- | --------------------------------------------------------------- | -------------- |
 | `task-a-llama`               | Potentially public | Docker Compose, scripts, bootstrap, config schema, README       | Low            |
 | `task-a-llama-skills`        | Public           | AI-agnostic Vikunja knowledge + Claude Code adapter             | Low-to-medium  |
-| `task-a-llama-overlay`       | Private          | Personal skills, customer context, personal conventions          | Medium         |
+| `mac-setup/dotfiles/task-a-llama` | Private (dotfiles) | overlay.yml (customer/project conventions) and future private skills | Low-medium |
 | `task-a-llama-pasture`       | Private          | SQL dumps of task database, committed on every backup cycle     | Daily          |
 
 **Framework** (`task-a-llama`) is AI-agnostic infrastructure. It knows nothing about Claude; it just runs Vikunja and orchestrates the other repos via a config file.
 
 **Public skills** (`task-a-llama-skills`) carry reusable Vikunja knowledge — API reference, schema, common queries, safe operating patterns. The knowledge lives as plain markdown; an `adapters/claude-code/` subtree repackages it as Claude Code `SKILL.md` files. Future adapters for Cursor, Aider, or Codex drop into sibling subtrees without touching the knowledge itself.
 
-**Private overlay** (`task-a-llama-overlay`) holds the personal bits: customer lists, project conventions, Linear sync field mappings, writing-style preferences. Lives inside the user's dotfiles repo (stow-managed) rather than as a standalone repo.
+**Private overlay** (`mac-setup/dotfiles/task-a-llama`) holds the personal bits: customer lists, project conventions, writing-style preferences, and any future private skills. Lives in the user's dotfiles repo as a stowed package, placing `overlay.yml` at `~/.config/task-a-llama/overlay.yml` and any private Claude Code skills at `~/.claude/skills/`.
 
 **Data** (`task-a-llama-pasture`) is the SQL dump history — regenerated nightly, committed to Git, pushed to a private remote. Every commit is a snapshot; every diff is a change report.
 

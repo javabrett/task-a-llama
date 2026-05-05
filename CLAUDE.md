@@ -14,7 +14,7 @@ Read `README.md` first for project overview, structure, and design decisions.
 ## What this repo is not
 
 - Not the place for AI skills or prompts — those live in `task-a-llama-skills` (public)
-  or `task-a-llama-overlay` (private, inside user dotfiles)
+  or the `task-a-llama` package in `mac-setup/dotfiles/` (private overlay, stowed from your dotfiles repo)
 - Not the place for task data — that lives in `task-a-llama-pasture` (private data repo)
 - Not a multi-user or team tool — single user, localhost deployment
 

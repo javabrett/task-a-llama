@@ -22,7 +22,7 @@ sources:
   # Private skills overlay — personal conventions and customer context
   private_skills:
     # Managed externally (by mac-setup dotfiles); bootstrap only verifies presence.
-    path: ~/code/mac-setup/dotfiles/task-a-llama-overlay
+    path: ~/mac-setup/dotfiles/task-a-llama
     stow_target: ~/.claude/skills
     visibility: private
     managed_by: mac-setup
