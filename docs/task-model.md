@@ -223,6 +223,47 @@ and `state:*` (convention-based, safe); **refuse and warn** for
 `context:*` labels not seen before, to avoid typo proliferation
 (`context:moneyliion`).
 
+### Design rationale: labels over per-customer projects
+
+Labels were chosen over per-customer Vikunja projects for one primary
+reason: **multi-assignability**. A task relating to two customers can
+carry `context:gendigital` and `context:xero` simultaneously, but can
+only live in one project. Customer work in practice does cross customer
+lines (shared infrastructure issues, multi-tenant bugs, joint rollouts),
+so the label model is a better fit than a project hierarchy.
+
+The tradeoff is that Vikunja projects have richer UI affordances (kanban
+boards, per-project ordering) that labels cannot replicate. If
+per-customer boards ever become important, revisiting this decision is
+reasonable. For now, Vikunja saved filters on `context:*` labels provide
+an adequate substitute.
+
+### Design rationale: `context:` prefix vs `customer:`
+
+`context:gendigital` rather than `customer:gendigital` was chosen to
+keep a single namespace for the "who / what domain" axis, covering both
+customer labels and internal-domain labels (`context:personal`,
+`context:ops`). The intent was one axis, one prefix.
+
+In hindsight this conflates two genuinely different things: customer
+relationships (external, structured, finite list) and internal domains
+(personal, ops, ad-hoc). A `customer:` prefix for the former and a
+separate prefix for the latter would have been more semantically
+precise.
+
+**The practical cost of the broad namespace:** the system cannot
+distinguish customer labels from other-domain labels by prefix alone.
+This means routing logic (e.g. "tasks tagged to a customer land in the
+Customers project") requires a maintained registry of customer label
+names. That registry is the `customers:` list in `overlay.yml`. The
+registry is compensating for the precision the broad namespace gave up.
+
+**Consequence to keep in mind:** if `context:personal` or `context:ops`
+are ever added to the overlay vocabulary, they must be explicitly
+excluded from any customer routing rules. The routing logic cannot safely
+assume "any resolved `context:*` label = customer task" once
+non-customer contexts exist in the vocabulary.
+
 ## Priority
 
 Vikunja stores priority as `int64` with no fixed enum but a conventional
