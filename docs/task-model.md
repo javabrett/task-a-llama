@@ -189,7 +189,7 @@ group nicely in the UI.
 ### `src:*` - where the task came from
 
 - `src:claude-code` (captured from a Claude Code session)
-- `src:linear` (pulled in by the Linear sync skill - Phase 3)
+- `src:linear` (pulled in by the Linear sync skill - `references/sync-linear.md`)
 - `src:web` (created in the Vikunja UI)
 - `src:caldav` (synced from a CalDAV client)
 
