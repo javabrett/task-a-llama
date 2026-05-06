@@ -57,6 +57,44 @@ resolves it automatically from the active slug.
 This applies whether the call is a one-off debug curl or part of a skill
 operation. Don't make the user hunt in the UI.
 
+## curl error handling for Vikunja API calls
+
+All curl calls to the Vikunja API must capture both the response body and the
+HTTP status code. Never use `-sf` together: `-f` exits non-zero on HTTP errors
+and discards the response body, making 4xx responses look identical to an empty
+result. This caused a silent dedup bug where `GET /tasks/all` returned 400 and
+the empty output was treated as "no existing tasks," masking all duplicates.
+
+Use this pattern for every API call in scripts and skill reference files:
+
+```bash
+HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" \
+  -H "Authorization: Bearer $TOKEN" \
+  "$URL" 2>&1)
+CURL_EXIT=$?
+HTTP_CODE=$(printf '%s' "$HTTP_RESPONSE" | tail -1)
+BODY=$(printf '%s' "$HTTP_RESPONSE" | sed '$d')
+
+if [ "$CURL_EXIT" -ne 0 ] || [ "${HTTP_CODE:-000}" -ge 400 ]; then
+  echo "API call failed (exit=$CURL_EXIT, HTTP=$HTTP_CODE): $BODY" >&2
+  exit 1
+fi
+```
+
+For dedup queries where 0 results is a valid outcome, check for HTTP errors
+before treating an empty array as "not found":
+
+```bash
+if [ "${HTTP_CODE:-000}" -ge 400 ]; then
+  echo "Dedup query failed (HTTP $HTTP_CODE): $BODY" >&2
+  exit 1
+fi
+COUNT=$(printf '%s' "$BODY" | grep -o '"id":[0-9]*' | wc -l)
+```
+
+No mutation (`POST`, `PUT`, `PATCH`, `DELETE`) may silently discard its
+response. No fire-and-forget API calls without explicit pre-approval.
+
 ## Named environment slugs
 
 The framework supports unlimited named environment slugs (e.g. `prod`, `test`,
