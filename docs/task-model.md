@@ -168,23 +168,34 @@ basenames at the same project title (e.g. several scratch
 directories all mapped to `Personal`). The `tal-meta` block holds at
 most one `path:`; one binding per project entity.
 
-## Labels: three axes
+## Labels: four axes
 
 Labels are the most expressive low-friction dimension Vikunja gives us.
-Use three semantic axes, prefix-namespaced:
+Use four semantic axes, prefix-namespaced:
 
-### `context:*` - who / what domain
+### `customer:*` - external customer relationship
 
-One label per customer, team, or broad area:
+One label per customer:
 
-- `context:moneylion`
-- `context:rakuten`
+- `customer:moneylion`
+- `customer:rakuten`
+- `customer:gendigital`
+
+Customer labels are pre-seeded in the overlay's `customers:` list. The
+skill refuses to auto-create them (typo guard). Multi-assignable: a task
+can carry `customer:gendigital` and `customer:xero` simultaneously if it
+spans both.
+
+### `context:*` - internal domain
+
+Broad area or personal context (not a customer relationship):
+
 - `context:personal`
 - `context:ops`
+- `context:home`
 
-Labels without the `context:` prefix are allowed (Vikunja doesn't
-enforce a scheme) but the skill emits the prefix by default so they
-group nicely in the UI.
+These are not in the `customers:` registry. Create them manually in
+Vikunja when needed.
 
 ### `src:*` - where the task came from
 
@@ -214,20 +225,18 @@ Vikunja has no native slot for.
   `done` flag.
 - Don't use labels for due dates (`due:today`). Use `due_date`.
 
-### Open question
+### Auto-create policy (resolved)
 
-The public skills repo (Phase 2) will ship a default label set. Should
-the skill auto-create missing labels on first use, or refuse to apply a
-label that doesn't exist? Recommendation: **auto-create** for `src:*`
-and `state:*` (convention-based, safe); **refuse and warn** for
-`context:*` labels not seen before, to avoid typo proliferation
-(`context:moneyliion`).
+**auto-create** for `src:*` and `state:*` (convention-based, safe);
+**refuse and warn** for `customer:*` labels not in the overlay registry,
+to avoid typo proliferation (`customer:moneyliion`); **refuse and warn**
+for `context:*` labels (reserved for internal domains; pre-seed manually).
 
 ### Design rationale: labels over per-customer projects
 
 Labels were chosen over per-customer Vikunja projects for one primary
 reason: **multi-assignability**. A task relating to two customers can
-carry `context:gendigital` and `context:xero` simultaneously, but can
+carry `customer:gendigital` and `customer:xero` simultaneously, but can
 only live in one project. Customer work in practice does cross customer
 lines (shared infrastructure issues, multi-tenant bugs, joint rollouts),
 so the label model is a better fit than a project hierarchy.
@@ -235,34 +244,23 @@ so the label model is a better fit than a project hierarchy.
 The tradeoff is that Vikunja projects have richer UI affordances (kanban
 boards, per-project ordering) that labels cannot replicate. If
 per-customer boards ever become important, revisiting this decision is
-reasonable. For now, Vikunja saved filters on `context:*` labels provide
+reasonable. For now, Vikunja saved filters on `customer:*` labels provide
 an adequate substitute.
 
-### Design rationale: `context:` prefix vs `customer:`
+### Historical note: the `context:` -> `customer:` split (2026-05)
 
-`context:gendigital` rather than `customer:gendigital` was chosen to
-keep a single namespace for the "who / what domain" axis, covering both
-customer labels and internal-domain labels (`context:personal`,
-`context:ops`). The intent was one axis, one prefix.
+The system originally used a single `context:*` namespace covering both
+external customer relationships (`context:gendigital`) and internal
+domains (`context:personal`, `context:ops`). This conflated two
+semantically different things, and forced the system to maintain an
+explicit registry (`customers:` in `overlay.yml`) to distinguish customer
+labels from other-domain labels - the registry was compensating for the
+lost prefix precision.
 
-In hindsight this conflates two genuinely different things: customer
-relationships (external, structured, finite list) and internal domains
-(personal, ops, ad-hoc). A `customer:` prefix for the former and a
-separate prefix for the latter would have been more semantically
-precise.
-
-**The practical cost of the broad namespace:** the system cannot
-distinguish customer labels from other-domain labels by prefix alone.
-This means routing logic (e.g. "tasks tagged to a customer land in the
-Customers project") requires a maintained registry of customer label
-names. That registry is the `customers:` list in `overlay.yml`. The
-registry is compensating for the precision the broad namespace gave up.
-
-**Consequence to keep in mind:** if `context:personal` or `context:ops`
-are ever added to the overlay vocabulary, they must be explicitly
-excluded from any customer routing rules. The routing logic cannot safely
-assume "any resolved `context:*` label = customer task" once
-non-customer contexts exist in the vocabulary.
+Migrated 2026-05: customer labels moved to `customer:*`; `context:*`
+reserved for internal domains. The `customers:` registry stays (typo guard
+and LLM vocabulary), but routing logic can now use prefix-matching rather
+than registry enumeration to identify customer tasks.
 
 ## Priority
 
